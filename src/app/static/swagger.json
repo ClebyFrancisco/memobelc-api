@@ -1,0 +1,32 @@
+{
+    "swagger":"2.0",
+    "info": {
+        "version": "1.0.0",
+        "title": "API MemoBelc"
+      },
+    "host": "http://127.0.0.1:5000",
+    "paths":{
+        "/login": {
+            "post": {
+              "tags": [
+                "Auth"
+              ],
+              "summary": "Perform authentication",
+              "responses": {
+                "200": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "ok"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+    }
+
+}
