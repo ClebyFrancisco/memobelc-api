@@ -1,11 +1,16 @@
 from flask import Flask
 from flask_swagger_ui import get_swaggerui_blueprint
-from src.app.routes.routes import routes
+from .database.mongo import mongo
+from .routes.routes import routes
 
 
 def create_app():
     app = Flask(__name__)
+    app.config['MONGO_URI'] = "mongodb://localhost:27017/memobelc"
+    app.config['SECRET_KEY'] = 'your_secret_key'
     
+    mongo.init_app(app)
+
     SWAGGER_URL = '/doc'
     API_URL = '/static/swagger.json'
     SWAGGERUI_BLUEPRINT = get_swaggerui_blueprint(
