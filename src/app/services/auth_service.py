@@ -14,7 +14,7 @@ def authenticate_user(email, password):
     user = find_user_by_email(email)
     if user and check_password_hash(user['password'], password):
         token = jwt.encode({
-            'name': user['name'],
+            'user_id': user['user_id'],
             'email': user['email'],
             'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=72)
         }, current_app.config['SECRET_KEY'], algorithm="HS256")

@@ -1,7 +1,7 @@
 import jwt
 from functools import wraps
 from flask import request, jsonify, current_app
-from ..models.user_model import find_user_by_email, create_user_in_db
+from ..models.user_model import find_user_by_email
 
 def token_required(f):
     @wraps(f)
