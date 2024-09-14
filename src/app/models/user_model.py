@@ -1,4 +1,3 @@
-import uuid
 from src.app import mongo
 
 class UserModel:

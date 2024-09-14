@@ -23,5 +23,5 @@ class ProtectedController:
 
 # Crie uma instância do controlador e adicione o Blueprint ao aplicativo
 protected_controller = ProtectedController()
-protected = protected_controller.protected_bp
+protected_bp = protected_controller.protected_bp
 
