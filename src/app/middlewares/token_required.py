@@ -1,7 +1,8 @@
 import jwt
 from functools import wraps
 from flask import request, jsonify, current_app
-from ..models.user_model import find_user_by_email
+from src.app.models.user_model import UserModel
+
 
 def token_required(f):
     @wraps(f)
@@ -15,7 +16,7 @@ def token_required(f):
         
         try:
             data = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=["HS256"])
-            current_user = find_user_by_email(data['email'])
+            current_user = UserModel.find_by_email(data['email'])
             if not current_user:
                 return jsonify({'message': 'User not found!'}), 401
         except jwt.ExpiredSignatureError:

@@ -1,19 +1,49 @@
-from src.app import mongo
 import uuid
+from src.app import mongo
 
-def find_user_by_email(email):
-    return mongo.db.users.find_one({'email': email})
+class UserModel:
+    def __init__(self, _id=None, name = None, email=None, password=None, **kwargs):
+        self.id = str(_id)
+        self.name = name
+        self.email = email
+        self.password = password
 
-def find_user_by_id(id):
-    return mongo.db.user.find_one({'user_id': id })
-    
+    def save_to_db(self):
+        """Salva o usuário no banco de dados MongoDB"""
+        user_data = {
+            'id': self.id,
+            'name': self.name,
+            'email': self.email,
+            'password': self.password
+        }
+        return mongo.db.users.insert_one(user_data)
 
-def create_user_in_db(name, email, hashed_password):
-    unique_id = f'{uuid.uuid4()}'
-    user = {
-        'user_id': unique_id,
-        'name': name,
-        'email': email, 
-        'password': hashed_password
-    }
-    return mongo.db.users.insert_one(user)
+    @staticmethod
+    def find_by_email(email):
+        """Busca um usuário pelo email"""
+        user_data = mongo.db.users.find_one({'email': email})
+        if user_data:
+            return UserModel(**user_data)
+        return None
+
+    @staticmethod
+    def find_by_id(user_id):
+        """Busca um usuário pelo ID"""
+        user_data = mongo.db.users.find_one({'id': user_id})
+        if user_data:
+            return UserModel(**user_data)
+        return None
+
+    def update_password(self, new_password):
+        """Atualiza a senha do usuário"""
+        self.password = new_password
+        mongo.db.users.update_one({'id': self.id}, {'$set': {'password': new_password}})
+
+    def to_dict(self):
+        """Converte o objeto UserModel para dicionário"""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'email': self.email,
+            'password': self.password
+        }
