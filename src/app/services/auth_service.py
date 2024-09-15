@@ -18,7 +18,7 @@ class AuthService:
         user = UserModel.find_by_email(email)
         if user and check_password_hash(user.password, password):
             token = jwt.encode({
-                'id': user.id,
+                '_id': user._id,
                 'email': user.email,
                 'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=72)
             }, current_app.config['SECRET_KEY'], algorithm="HS256")

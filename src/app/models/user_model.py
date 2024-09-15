@@ -2,7 +2,7 @@ from src.app import mongo
 
 class UserModel:
     def __init__(self, _id=None, name = None, email=None, password=None, **kwargs):
-        self.id = str(_id)
+        self._id = str(_id) if _id else None
         self.name = name
         self.email = email
         self.password = password
@@ -10,7 +10,6 @@ class UserModel:
     def save_to_db(self):
         """Salva o usuário no banco de dados MongoDB"""
         user_data = {
-            'id': self.id,
             'name': self.name,
             'email': self.email,
             'password': self.password
@@ -28,7 +27,7 @@ class UserModel:
     @staticmethod
     def find_by_id(user_id):
         """Busca um usuário pelo ID"""
-        user_data = mongo.db.users.find_one({'id': user_id})
+        user_data = mongo.db.users.find_one({'_id': user_id})
         if user_data:
             return UserModel(**user_data)
         return None
@@ -41,7 +40,7 @@ class UserModel:
     def to_dict(self):
         """Converte o objeto UserModel para dicionário"""
         return {
-            'id': self.id,
+            '_id': self.id,
             'name': self.name,
             'email': self.email,
             'password': self.password
