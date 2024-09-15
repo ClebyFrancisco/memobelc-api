@@ -1,4 +1,5 @@
 from ..models.card_model import CardModel
+from bson import ObjectId
 
 class CardService:
     @staticmethod
@@ -14,19 +15,14 @@ class CardService:
         return CardModel.find_by_id(card_id)
 
     @staticmethod
-    def update_card(card_id, front=None, back=None):
-        """Atualiza um cartão existente"""
-        card = CardModel.find_by_id(card_id)
+    def update_card_performance(card_id, success):
+        """Atualiza o desempenho de um card"""
+        card = CardService.get_card_by_id(card_id)
         if card:
-            if front:
-                card.front = front
-            if back:
-                card.back = back
-            card.updated_at = datetime.utcnow()
-            card.save_to_db()
-        return card
+            card.update_performance(success)
+            return card
+        return None
 
     @staticmethod
     def delete_card(card_id):
-        """Remove um cartão pelo ID"""
-        mongo.db.cards.delete_one({'_id': card_id})
+        return CardModel.delete_card(card_id)   
