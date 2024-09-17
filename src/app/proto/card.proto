@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package card;
+
+
+message cardPost {
+    string front = 1;
+    string back = 2;
+}
+message cardGet {
+    string message = 1;
+    
+}
