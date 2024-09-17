@@ -1,13 +1,16 @@
 from flask import Flask
 from flask_swagger_ui import get_swaggerui_blueprint
+import os
+from dotenv import load_dotenv
 from .database.mongo import mongo
 from .routes.routes import routes
 
 
 def create_app():
+    load_dotenv()
     app = Flask(__name__)
-    app.config['MONGO_URI'] = "mongodb://localhost:27017/memobelc"
-    app.config['SECRET_KEY'] = 'your_secret_key'
+    app.config['MONGO_URI'] = os.getenv('MONGO_URI')
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
     
     mongo.init_app(app)
 
