@@ -1,17 +1,13 @@
 from flask import Flask
 from flask_swagger_ui import get_swaggerui_blueprint
-import os
-from dotenv import load_dotenv
-from .database.mongo import mongo
+from src.app.database.mongo import mongo
 from .routes.routes import routes
-
+from .config import Config
 
 def create_app():
-    load_dotenv()
     app = Flask(__name__)
-    app.config['MONGO_URI'] = os.getenv('MONGO_URI')
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
-    
+    app.config.from_object(Config)
+
     mongo.init_app(app)
 
     SWAGGER_URL = '/doc'
@@ -20,7 +16,7 @@ def create_app():
         SWAGGER_URL,
         API_URL,
         config={
-            'app_name': "API Game Chechers"
+            'app_name': "API Game Checkers"
         })
     
     

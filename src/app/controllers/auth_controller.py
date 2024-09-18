@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, Response, current_app
 from ..services.auth_service import AuthService
 
 
@@ -30,7 +30,12 @@ class AuthController:
         # Chama o serviço para autenticar o usuário
         token = self.auth_service.authenticate_user(data['email'], data['password'])
         if token:
-            return jsonify({'token': token}), 200
+            if current_app.config['FLASK_ENV'] == 'development':
+                return jsonify({'Token': token}), 200
+            else:
+                serialized_response = bytes(token)
+                return Response(serialized_response, mimetype='application/octet-stream', status=200)
+
         else:
             return jsonify({'error': 'Invalid credentials'}), 401
 
