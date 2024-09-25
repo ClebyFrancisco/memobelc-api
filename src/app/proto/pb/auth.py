@@ -27,6 +27,8 @@ class LoginRequest(betterproto.Message):
 @dataclass
 class LoginResponse(betterproto.Message):
     token: str = betterproto.string_field(1)
+    name: str = betterproto.string_field(2)
+    email: str = betterproto.string_field(3)
 
 
 @dataclass

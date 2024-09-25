@@ -26,7 +26,11 @@ class AuthService:
             }, current_app.config['SECRET_KEY'], algorithm="HS256")
             
             if current_app.config['FLASK_ENV'] == 'development':
-                return token
+                return {'token': token, 'name':user.name, 'email':user.email}
             else:
-                return LoginResponse(token=token)
+                return LoginResponse(token=token, name=user.name, email=user.email)
+            
         return None
+    
+    def updated_password(self, _id, new_password):
+        pass

@@ -31,7 +31,7 @@ class AuthController:
         token = self.auth_service.authenticate_user(data['email'], data['password'])
         if token:
             if current_app.config['FLASK_ENV'] == 'development':
-                return jsonify({'Token': token}), 200
+                return jsonify(token), 200
             else:
                 serialized_response = bytes(token)
                 return Response(serialized_response, mimetype='application/octet-stream', status=200)
