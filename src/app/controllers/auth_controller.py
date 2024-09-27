@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request, Response, current_app
 from ..services.auth_service import AuthService
-from ..proto.pb.auth import LoginRequest
+from ..proto.pb.auth import LoginRequest, RefreshToken
 
 
 class AuthController:
@@ -51,7 +51,35 @@ class AuthController:
                 serialized_response = bytes(token)
                 return Response(serialized_response, mimetype='application/octet-stream', status=200)
 
+    def refresh_token(self):
+        if current_app.config['FLASK_ENV'] == 'development':
+            
+            data = request.get_json()
+            
+            # Verificação de campos obrigatórios
+            if 'token' not in data:
+                return jsonify({'error': 'token is required'}), 400
+            
+            # Chama o serviço para autenticar o usuário
+            token = self.auth_service.refresh_token(data['token'])
+            if token:
+                return jsonify(token), 200
+            else:
+                return jsonify({'error': 'Invalid credentials'}), 401
+        else:
+            
+            data = request.data
+            refresh_request = RefreshToken().parse(data)
 
+            if not refresh_request.token:
+                error_response = ErrorResponse(error="token is missing")
+                return Response(bytes(error_response), status=400, mimetype='application/x-protobuf')
+            
+            token = self.auth_service.refresh_token(refresh_request.token)
+        
+            if token:
+                serialized_response = bytes(token)
+                return Response(serialized_response, mimetype='application/octet-stream', status=200)
 
 # Instância da classe AuthController
 auth_controller = AuthController()
@@ -62,3 +90,4 @@ auth_blueprint = Blueprint('auth_blueprint', __name__)
 # Definindo as rotas
 auth_blueprint.route('/register', methods=['POST'])(auth_controller.register)
 auth_blueprint.route('/login', methods=['POST'])(auth_controller.login)
+auth_blueprint.route('/refresh_token', methods=['POST'])(auth_controller.refresh_token)

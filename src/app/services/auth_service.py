@@ -31,6 +31,24 @@ class AuthService:
                 return LoginResponse(token=token, name=user.name, email=user.email)
             
         return None
+    def refresh_token(self, token):
+        data = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=["HS256"])
+        user = UserModel.find_by_email(data['email'])
+        
+        if user:
+            token = jwt.encode({
+                '_id': user._id,
+                'email': user.email,
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=72)
+            }, current_app.config['SECRET_KEY'], algorithm="HS256")
+            
+            
+        if current_app.config['FLASK_ENV'] == 'development':
+            return {'token': token, 'name':user.name, 'email':user.email}
+        else:
+            return LoginResponse(token=token, name=user.name, email=user.email)
+            
+        return None
     
     def updated_password(self, _id, new_password):
         pass
