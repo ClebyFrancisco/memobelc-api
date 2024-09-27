@@ -9,6 +9,8 @@ frames/
 venv/
 .env
 
+proto/pb/
+
 
 *.sqlite3
 

@@ -32,5 +32,10 @@ class LoginResponse(betterproto.Message):
 
 
 @dataclass
+class ErrorResponse(betterproto.Message):
+    erro: str = betterproto.string_field(1)
+
+
+@dataclass
 class Empty(betterproto.Message):
     pass

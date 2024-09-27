@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request, Response, current_app
 from ..services.auth_service import AuthService
+from ..proto.pb.auth import LoginRequest
 
 
 class AuthController:
@@ -21,23 +22,35 @@ class AuthController:
             return jsonify({'error': 'User already exists'}), 400
 
     def login(self):
-        data = request.get_json()
-
-        # Verificação de campos obrigatórios
-        if 'email' not in data or 'password' not in data:
-            return jsonify({'error': 'Email and password are required'}), 400
-
-        # Chama o serviço para autenticar o usuário
-        token = self.auth_service.authenticate_user(data['email'], data['password'])
-        if token:
-            if current_app.config['FLASK_ENV'] == 'development':
+        if current_app.config['FLASK_ENV'] == 'development':
+            
+            data = request.get_json()
+            
+            # Verificação de campos obrigatórios
+            if 'email' not in data or 'password' not in data:
+                return jsonify({'error': 'Email and password are required'}), 400
+            
+            # Chama o serviço para autenticar o usuário
+            token = self.auth_service.authenticate_user(data['email'], data['password'])
+            if token:
                 return jsonify(token), 200
             else:
+                return jsonify({'error': 'Invalid credentials'}), 401
+        else:
+            
+            data = request.data
+            login_request = LoginRequest().parse(data)
+
+            if not login_request.email or not login_request.password :
+                error_response = ErrorResponse(error="Email and password are required")
+                return Response(bytes(error_response), status=400, mimetype='application/x-protobuf')
+            
+            token = self.auth_service.authenticate_user(login_request.email, login_request.password)
+        
+            if token:
                 serialized_response = bytes(token)
                 return Response(serialized_response, mimetype='application/octet-stream', status=200)
 
-        else:
-            return jsonify({'error': 'Invalid credentials'}), 401
 
 
 # Instância da classe AuthController
