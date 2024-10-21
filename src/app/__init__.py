@@ -1,6 +1,7 @@
 from flask import Flask
 from flask_swagger_ui import get_swaggerui_blueprint
 from src.app.database.mongo import mongo
+from src.app.provider.mail import mail
 from .routes.routes import routes
 from .config import Config
 
@@ -9,6 +10,7 @@ def create_app():
     app.config.from_object(Config)
 
     mongo.init_app(app)
+    mail.init_app(app)
 
     SWAGGER_URL = '/doc'
     API_URL = '/static/swagger.json'

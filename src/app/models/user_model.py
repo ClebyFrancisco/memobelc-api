@@ -1,4 +1,6 @@
 from src.app import mongo
+import random
+import string
 
 class UserModel:
     def __init__(self, _id=None, name = None, email=None, password=None, **kwargs):
@@ -16,7 +18,9 @@ class UserModel:
             'password': self.password,
             'is_confirmed': False
         }
-        return mongo.db.users.insert_one(user_data)
+        mongo.db.users.insert_one(user_data)
+        self.generate_code(user_data['email'])
+        return True
 
     @staticmethod
     def find_by_email(email):
@@ -38,17 +42,36 @@ class UserModel:
     def verify_is_confirmed(email):
         """Verificar se um usuário está confirmado!"""
         user_data = mongo.db.users.find_one({'email': email})
-        print(user_data)
         if user_data and user_data['is_confirmed']:
             return True
         else:
             return False
+        
+        
+    @staticmethod
+    def verify_code(email, code):
+        user_data = mongo.db.users.find_one({'email': email})
+        print(code);
+        
+        
+        if not UserModel.verify_is_confirmed(email) and user_data['code'] == code:
+            return True
+        else:
+            return False
+        
 
     
     @staticmethod
     def turn_confirmed(email):
         """Alterar o status de um usuário para confirmado"""
         mongo.db.users.update_one({'email': email}, {'$set': {'is_confirmed': True}})
+        mongo.db.users.update_one({'email': email}, {'$unset': {'code':''}})
+        
+    @staticmethod
+    def generate_code(email):
+        code = ''.join(random.choices(string.digits, k=6))
+        mongo.db.users.update_one({'email': email}, {'$set': {'code':code}})
+        return code
         
         
 
