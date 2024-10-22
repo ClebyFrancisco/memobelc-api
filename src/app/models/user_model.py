@@ -51,8 +51,6 @@ class UserModel:
     @staticmethod
     def verify_code(email, code):
         user_data = mongo.db.users.find_one({'email': email})
-        print(code);
-        
         
         if not UserModel.verify_is_confirmed(email) and user_data['code'] == code:
             return True
