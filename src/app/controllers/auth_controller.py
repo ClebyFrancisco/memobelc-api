@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request, Response, current_app
 from ..services.auth_service import AuthService
 from ..middlewares.token_required import token_required
 from src.app import mail
-from ..proto.pb.auth import LoginRequest, RefreshToken, RegisterRequest, RegisterResponse, ErrorResponse
+from ..proto.pb.auth import LoginRequest, RefreshToken, RegisterRequest, RegisterResponse, ErrorResponse, CodeRequest
 from ..middlewares.token_required import token_required
 from ..models.user_model import UserModel
 
@@ -111,18 +111,43 @@ class AuthController:
     @staticmethod
     @token_required    
     def verify_code(current_user, token):
-        user = UserModel.find_by_email(current_user.email)
-        
-        data = request.get_json()
-        
-        response = AuthService.verify_code(current_user, data['code'])
-        
-        if response :
-            # Chama o serviço para autenticar o usuário
-            token = AuthService.refresh_token(token)
-            return jsonify(token), 200
+        if current_app.config['FLASK_ENV'] == 'development':
+            user = UserModel.find_by_email(current_user.email)
+            
+            data = request.get_json()
+            
+            response = AuthService.verify_code(current_user, data['code'])
+            
+            if response :
+                # Chama o serviço para autenticar o usuário
+                token = AuthService.refresh_token(token)
+                return jsonify(token), 200
+            else:
+                return jsonify("Código inválido"), 401
         else:
-            return jsonify("Código inválido"), 401
+            data = request.data
+            code_request = CodeRequest().parse(data)
+            
+            if not code_request.code:
+                error_response = ErrorResponse(error="code is missing")
+                return Response(bytes(error_response), status=400, mimetype='application/x-protobuf')
+            
+            response = AuthService.verify_code(current_user, code_request.code)
+            
+            if response:
+                # Chama o serviço para autenticar o usuário
+                token = AuthService.refresh_token(token)
+        
+                if token:
+                    serialized_response = bytes(token)
+                    return Response(serialized_response, mimetype='application/octet-stream', status=200)
+                else:
+                    error_response = ErrorResponse(error="Token inválido")
+                    return Response(bytes(error_response), status=401, mimetype='application/x-protobuf')
+            else:
+                error_response = ErrorResponse(error="Código inválido")
+                return Response(bytes(error_response), status=401, mimetype='application/x-protobuf')
+
         
 
 
