@@ -16,7 +16,19 @@ class AuthService:
             return None
         hashed_password = generate_password_hash(password)
         
-        return UserModel(name=name, email=email, password=hashed_password).save_to_db()
+        UserModel(name=name, email=email, password=hashed_password).save_to_db()
+        user = UserModel.find_by_email(email)
+        
+        if user:
+            token = jwt.encode({
+                '_id': user._id,
+                'email': user.email,
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=72)
+            }, current_app.config['SECRET_KEY'], algorithm="HS256")
+            return token
+        return None
+        
+        
     
     @staticmethod
     def authenticate_user(email, password):

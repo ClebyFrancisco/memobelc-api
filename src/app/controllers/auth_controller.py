@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request, Response, current_app
 from ..services.auth_service import AuthService
 from ..middlewares.token_required import token_required
 from src.app import mail
-from ..proto.pb.auth import LoginRequest, RefreshToken, RegisterRequest
+from ..proto.pb.auth import LoginRequest, RefreshToken, RegisterRequest, RegisterResponse, ErrorResponse
 from ..middlewares.token_required import token_required
 from ..models.user_model import UserModel
 
@@ -37,7 +37,7 @@ class AuthController:
             
             user = AuthService.create_user(register_request.name, register_request.email, register_request.password)
             if user:
-                serialized_response = bytes(RegisterResponse(message='User created successfully'))
+                serialized_response = bytes(RegisterResponse(message=user))
                 return Response(serialized_response, mimetype='application/octet-stream', status=201)
 
             else:
