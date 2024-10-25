@@ -19,7 +19,6 @@ class UserModel:
             'is_confirmed': False
         }
         mongo.db.users.insert_one(user_data)
-        self.generate_code(user_data['email'])
         return True
 
     @staticmethod

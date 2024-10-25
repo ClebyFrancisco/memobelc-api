@@ -25,6 +25,8 @@ class AuthService:
                 'email': user.email,
                 'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=72)
             }, current_app.config['SECRET_KEY'], algorithm="HS256")
+            code = UserModel.generate_code(email)
+            AuthService.send_confirm_email(email, code)
             return token
         return None
         
