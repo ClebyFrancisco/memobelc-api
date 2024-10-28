@@ -1,6 +1,6 @@
 import jwt
 import datetime
-from flask import current_app
+from flask import current_app, jsonify
 from flask_mail import Message
 from werkzeug.security import generate_password_hash, check_password_hash
 from src.app import mail
@@ -101,5 +101,18 @@ class AuthService:
         return "E-mail enviado!"
         
     @staticmethod
-    def updated_password(_id, new_password):
-        pass
+    def forgot_password(email):
+        user = UserModel.find_by_email(email)
+        
+        if not user:
+            return None
+        
+        code = UserModel.generate_code(email)
+        AuthService.send_confirm_email(email, code)
+        token_code = jwt.encode({
+                'email': user.email,
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+            }, current_app.config['SECRET_KEY'], algorithm="HS256")
+        return jsonify({'token': token_code}), 200
+        
+        

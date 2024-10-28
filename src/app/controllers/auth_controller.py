@@ -148,7 +148,14 @@ class AuthController:
                 error_response = ErrorResponse(error="Código inválido")
                 return Response(bytes(error_response), status=401, mimetype='application/x-protobuf')
 
+    @staticmethod
+    def forgot_password():
+        data = request.get_json()
         
+        if 'email' not in data:
+            return jsonify({'error': 'Email and password are required'}), 400
+        
+        return AuthService.forgot_password(data['email'])
 
 
         
@@ -160,3 +167,4 @@ auth_blueprint.route('/register', methods=['POST'])(AuthController.register)
 auth_blueprint.route('/login', methods=['POST'])(AuthController.login)
 auth_blueprint.route('/refresh_token', methods=['POST'])(AuthController.refresh_token)
 auth_blueprint.route('/verify_code', methods=['POST'])(AuthController.verify_code)
+auth_blueprint.route('/forgot_password', methods=['POST'])(AuthController.forgot_password)
