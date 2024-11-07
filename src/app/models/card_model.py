@@ -1,9 +1,10 @@
 from datetime import datetime
 from bson import ObjectId
 from src.app import mongo
+from .deck_model import DeckModel
 
 class CardModel:
-    def __init__(self, _id=None, front=None, back=None, media_type="text", created_at=None, updated_at=None):
+    def __init__(self, _id=None, front=None, back=None, media_type="text", created_at=None, updated_at=None, deck=None):
         """
         Inicializa um CardModel representando uma carta de estudo.
 
@@ -20,6 +21,7 @@ class CardModel:
         self.media_type = media_type
         self.created_at = created_at or datetime.utcnow()
         self.updated_at = updated_at or datetime.utcnow()
+        self.deck = deck
 
     def save_to_db(self):
         """Salva ou atualiza a carta no banco de dados MongoDB."""
@@ -36,6 +38,9 @@ class CardModel:
         else:
             result = mongo.db.cards.insert_one(card_data)
             self.id = str(result.inserted_id)
+            if self.deck:
+                DeckModel.add_cards_to_deck(self.deck, [str(result.inserted_id)])
+            
 
     def delete_from_db(self):
         """Remove a carta do banco de dados MongoDB."""

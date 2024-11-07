@@ -8,6 +8,7 @@ class CardService:
         card = CardModel(
             front=data.get("front"),
             back=data.get("back"),
+            deck= data.get("deck"),
             media_type=data.get("media_type", "text")
         )
         card.save_to_db()

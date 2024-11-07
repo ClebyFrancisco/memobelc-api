@@ -9,8 +9,10 @@ class DecksController():
         # Verificação de campos obrigatórios
         if 'name' not in data:
             return jsonify({'error': 'Missing required information'}), 400
+        
+        image = None
 
-        result = DeckService.create_deck(data['name'])
+        result = DeckService.create_deck(data['name'], data['masterdeck_id'], image)
         return jsonify(result), 200
     
     def get_all_decks():
