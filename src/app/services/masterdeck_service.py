@@ -4,9 +4,9 @@ from ..models.masterdeck_model import MasterDeckModel
 
 class MasterDeckService:
     @staticmethod
-    def create_masterdeck(name, image=None):
+    def create_masterdeck(name, image=None, user=None):
         """Cria um novo mastdeck e o salva no banco de dados"""
-        deck = MasterDeckModel(name=name, image=image)
+        deck = MasterDeckModel(name=name, image=image, user=user)
         deck.save_to_db()
         return "Ok"
     

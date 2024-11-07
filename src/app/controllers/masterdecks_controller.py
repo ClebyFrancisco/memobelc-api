@@ -9,8 +9,21 @@ class MasterDecksController():
         # Verificação de campos obrigatórios
         if 'name' not in data:
             return jsonify({'error': 'Missing required information'}), 400
+        
 
-        result = MasterDeckService.create_masterdeck(data['name'])
+        
+        if 'user_id' in data:
+            user = data['user_id']
+        else:
+            user = None
+
+
+        if 'image' in data:
+            image = data['image']
+        else:
+            image = None
+
+        result = MasterDeckService.create_masterdeck(data['name'], image, user)
         return jsonify(result), 200
     
     @staticmethod

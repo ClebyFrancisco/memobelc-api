@@ -2,15 +2,17 @@ import random
 from bson import ObjectId
 from datetime import datetime, timedelta
 from src.app import mongo
+from .user_model import UserModel
 
 class MasterDeckModel:
-    def __init__(self, _id=None, name=None, created_at=None, updated_at=None, image=None, decks=None):
+    def __init__(self, _id=None, name=None, created_at=None, updated_at=None, image=None, decks=None, user=None):
         self.id = str(_id) if _id else None
         self.name = name
         self.created_at = created_at or datetime.utcnow()
         self.updated_at = updated_at or datetime.utcnow()
         self.image = image
         self.decks = decks or []
+        self.user = user
 
     def save_to_db(self):
         """Salva o Masterdeck no banco de dados MongoDB"""
@@ -23,6 +25,10 @@ class MasterDeckModel:
         }
         result = mongo.db.masterdecks.insert_one(deck_data)
         self.id = str(result.inserted_id)
+
+        if self.user:
+            UserModel.add_masterdecks_to_user(self.user, [self.id])
+
         return True
     
     @staticmethod
