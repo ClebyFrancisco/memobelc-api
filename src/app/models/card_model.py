@@ -2,9 +2,10 @@ from datetime import datetime
 from bson import ObjectId
 from src.app import mongo
 from .deck_model import DeckModel
+from .user_progress_model import UserProgressModel
 
 class CardModel:
-    def __init__(self, _id=None, front=None, back=None, media_type="text", created_at=None, updated_at=None, deck=None):
+    def __init__(self, _id=None, front=None, back=None, media_type="text", created_at=None, updated_at=None, deck=None, user=None):
         """
         Inicializa um CardModel representando uma carta de estudo.
 
@@ -22,6 +23,7 @@ class CardModel:
         self.created_at = created_at or datetime.utcnow()
         self.updated_at = updated_at or datetime.utcnow()
         self.deck = deck
+        self.user = user
 
     def save_to_db(self):
         """Salva ou atualiza a carta no banco de dados MongoDB."""
@@ -40,6 +42,7 @@ class CardModel:
             self.id = str(result.inserted_id)
             if self.deck:
                 DeckModel.add_cards_to_deck(self.deck, [str(result.inserted_id)])
+                UserProgressModel.create_or_update(self.user, self.deck, self.id, "pendente")
             
 
     def delete_from_db(self):

@@ -27,7 +27,7 @@ class MasterDeckModel:
         self.id = str(result.inserted_id)
 
         if self.user:
-            UserModel.add_masterdecks_to_user(self.user, [self.id])
+            UserModel.add_masterdecks_to_user(self.user, [str(result.inserted_id)])
 
         return True
     
