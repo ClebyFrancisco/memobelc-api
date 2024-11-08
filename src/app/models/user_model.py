@@ -49,7 +49,7 @@ class UserModel:
     @staticmethod
     def find_by_id(user_id):
         """Busca um usuário pelo ID"""
-        user_data = mongo.db.users.find_one({'_id': user_id})
+        user_data = mongo.db.users.find_one({'_id': ObjectId(user_id)})
         if user_data:
             return UserModel(**user_data)
         return None
@@ -101,8 +101,8 @@ class UserModel:
     def to_dict(self):
         """Converte o objeto UserModel para dicionário"""
         return {
-            '_id': self.id,
+            '_id': self._id,
             'name': self.name,
             'email': self.email,
-            'password': self.password
+            'masterdecks': [str(ObjectId(masterdeck_id)) for masterdeck_id in self.masterdecks],
         }

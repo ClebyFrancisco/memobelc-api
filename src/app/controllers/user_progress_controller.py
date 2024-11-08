@@ -9,15 +9,11 @@ class UserProgressController:
         user_id = data.get("user_id")
         deck_id = data.get("deck_id")
         card_id = data.get("card_id")
-        status = data.get("status", "pendente")
-
-        print(data)
-        print(status)
 
         if not all([user_id, deck_id, card_id]):
             return jsonify({"error": "Missing required information"}), 400
 
-        UserProgressService.create_or_update_progress(user_id, deck_id, card_id, status)
+        UserProgressService.create_or_update_progress(user_id, deck_id, card_id)
         return jsonify({"message": "User progress updated successfully"}), 200
 
     @staticmethod
@@ -38,12 +34,11 @@ class UserProgressController:
         user_id = data.get("user_id")
         deck_id = data.get("deck_id")
         card_id = data.get("card_id")
-        new_status = data.get("status")
 
-        if not all([user_id, deck_id, card_id, new_status]):
+        if not all([user_id, deck_id, card_id]):
             return jsonify({"error": "Missing required information"}), 400
 
-        updated_progress = UserProgressService.update_card_status(user_id, deck_id, card_id, new_status)
+        updated_progress = UserProgressService.update_card_status(user_id, deck_id, card_id)
         return jsonify({"updated_progress": updated_progress}), 200
 
 # Blueprint para as rotas de progresso de usuário

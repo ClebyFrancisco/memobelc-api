@@ -30,6 +30,17 @@ class MasterDecksController():
     def get_by_id(deck_id):
         result = MasterDeckService.get_by_id(deck_id)
         return jsonify(result), 200 
+    
+    @staticmethod
+    def get_masterdecks_by_user():
+        user_id = request.args.get("user_id")
+
+        if not user_id:
+            return jsonify({"error": "User ID is required"}), 400
+        
+        
+        result = MasterDeckService.get_masterdecks_by_user(user_id)
+        return jsonify(result), 200
 
     @staticmethod
     def get_all_masterdecks():
@@ -62,5 +73,6 @@ masterdeck_blueprint = Blueprint('masterdecks_blueprint', __name__)
 # Definindo as rotas
 masterdeck_blueprint.route('/create', methods=['POST'])(MasterDecksController.createMasterDeck)
 masterdeck_blueprint.route('/get', methods=['GET'])(MasterDecksController.get_all_masterdecks)
+masterdeck_blueprint.route('/get_by_user', methods=['GET'])(MasterDecksController.get_masterdecks_by_user)
 masterdeck_blueprint.route('/get/<string:deck_id>', methods=['GET'])(MasterDecksController.get_by_id)
 masterdeck_blueprint.route('/add_decks/<string:masterdeck_id>', methods=['PATCH'])(MasterDecksController.add_decks_to_masterdeck)

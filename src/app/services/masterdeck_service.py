@@ -15,6 +15,10 @@ class MasterDeckService:
         """Busca um MasterDeck pelo ID"""
         masterdeck = MasterDeckModel.get_by_id(deck_id)
         return masterdeck
+    
+    @staticmethod
+    def get_masterdecks_by_user(user_id):
+        return MasterDeckModel.get_masterdecks_by_user(user_id)
 
     @staticmethod
     def get_all_masterdecks():

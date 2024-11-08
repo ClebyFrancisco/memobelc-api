@@ -42,7 +42,7 @@ class CardModel:
             self.id = str(result.inserted_id)
             if self.deck:
                 DeckModel.add_cards_to_deck(self.deck, [str(result.inserted_id)])
-                UserProgressModel.create_or_update(self.user, self.deck, self.id, "pendente")
+                UserProgressModel.create_or_update(self.user, self.deck, self.id)
             
 
     def delete_from_db(self):

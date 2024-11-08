@@ -4,9 +4,9 @@ from ..models.user_progress_model import UserProgressModel
 class UserProgressService:
 
     @staticmethod
-    def create_or_update_progress(user_id, deck_id, card_id, status="pendente"):
+    def create_or_update_progress(user_id, deck_id, card_id):
         """Cria ou atualiza o progresso do usuário para uma carta específica."""
-        UserProgressModel.create_or_update(user_id, deck_id, card_id, status)
+        UserProgressModel.create_or_update(user_id, deck_id, card_id)
 
     @staticmethod
     def get_pending_cards(user_id, deck_id=None):
@@ -14,10 +14,10 @@ class UserProgressService:
         return UserProgressModel.get_pending_cards(user_id, deck_id)
 
     @staticmethod
-    def update_card_status(user_id, deck_id, card_id, new_status):
+    def update_card_status(user_id, deck_id, card_id):
         """Atualiza o status de uma carta específica no progresso do usuário."""
         progress = UserProgressModel(user_id, deck_id, card_id)
-        progress.update_status(new_status)
+        progress.update_status()
         return "ok"
 
     @staticmethod

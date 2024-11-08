@@ -13,6 +13,15 @@ class DeckModel:
         self.masterdeck_id = masterdeck_id
         self.image = image
         self.cards = cards or []
+        
+    @staticmethod
+    def get_by_id(deck_id):
+        """Busca um Deck pelo ID e retorna como dicionário"""
+        deck = mongo.db.decks.find_one({"_id": ObjectId(deck_id)})
+        if deck:
+            result = DeckModel(**deck)
+            return result.to_dict()
+        return None
 
     def save_to_db(self):
         """Salva o  deck no banco de dados MongoDB"""
@@ -49,14 +58,13 @@ class DeckModel:
         
         return result.modified_count > 0
     
-    @staticmethod
-    def to_dict( deck):
-        """Converte um documento  deck para dicionário"""
+    def to_dict(self):
+        """Converte um documento deck para dicionário"""
         return {
-            '_id': str( deck.get('_id')),
-            'name':  deck.get('name'),
-            'created_at':  deck.get('created_at'),
-            'updated_at':  deck.get('updated_at'),
-            'image':  deck.get('image'),
-            'decks':  deck.get('decks', [])
+            '_id': self.id,
+            'name': self.name,
+            'created_at': self.created_at,
+            'updated_at': self.updated_at,
+            'image': self.image,
+            'cards': [str(ObjectId(card_id)) for card_id in self.cards]
         }
