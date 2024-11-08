@@ -41,7 +41,29 @@ class MasterDeckModel:
     def get_by_id(deck_id):
         """Busca um MasterDeck pelo ID e retorna como dicionário"""
         masterdeck = mongo.db.masterdecks.find_one({"_id": ObjectId(deck_id)})
-        return MasterDeckModel.to_dict(masterdeck) if masterdeck else None
+        if masterdeck:
+            a = MasterDeckModel(**masterdeck)
+            print(a)
+            return a
+        return None
+    
+
+    @staticmethod
+    def get_masterdecks_by_user(user_id):
+        user = UserModel.find_by_id(user_id)
+        
+        
+        user = user.to_dict()
+
+        masterdecks_list = []
+    
+        for masterdeck_id in user.get("masterdecks", []):
+            deck = MasterDeckModel.get_by_id(masterdeck_id)
+            masterdecks_list.append(deck.to_dict())
+
+            print(masterdecks_list)
+
+        return {user}
     
 
     @staticmethod
@@ -58,14 +80,15 @@ class MasterDeckModel:
         
         return result.modified_count > 0
     
-    @staticmethod
-    def to_dict(masterdeck):
+
+    def to_dict(self):
         """Converte um documento masterdeck para dicionário"""
         return {
-            '_id': str(masterdeck.get('_id')),
-            'name': masterdeck.get('name'),
-            'created_at': masterdeck.get('created_at'),
-            'updated_at': masterdeck.get('updated_at'),
-            'image': masterdeck.get('image'),
-            'decks': [str(deck_id) for deck_id in masterdeck.get('decks', [])]
+            '_id': self.id,
+            'name': self.name,
+            'created_at': self.created_at,
+            'updated_at': self.updated_at,
+            'image': self.image,
+            'decks': [str(ObjectId(deck_id)) for deck_id in self.decks]
         }
+
