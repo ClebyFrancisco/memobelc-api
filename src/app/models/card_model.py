@@ -1,78 +1,103 @@
+"""Model class for cards"""
+
 from datetime import datetime
 from bson import ObjectId
 from src.app import mongo
+from app.models.deck_model import DeckModel
+from app.models.user_progress_model import UserProgressModel
+
 
 class CardModel:
-    def __init__(self, _id=None, front=None, back=None, created_at=None, updated_at=None, total_views=0, mistakes=0, last_viewed_at=None, ease_factor=2.5):
-        self._id = str(_id) if _id else None
+    """Class to handle model cards"""
+
+    def __init__(
+        self,
+        _id=None,
+        front=None,
+        back=None,
+        media_type="text",
+        created_at=None,
+        updated_at=None,
+        deck=None,
+        user=None,
+    ):
+        """
+        Inicializa um CardModel representando uma carta de estudo.
+
+        :param _id: ID do documento no MongoDB (gerado automaticamente se não fornecido)
+        :param front: Conteúdo da frente da carta
+        :param back: Conteúdo do verso da carta
+        :param media_type: Tipo de mídia (text, image, audio)
+        :param created_at: Data de criação (atualizado automaticamente se não fornecido)
+        :param updated_at: Data de atualização (atualizado automaticamente se não fornecido)
+        """
+        self.id = str(_id) if _id else None
         self.front = front
         self.back = back
+        self.media_type = media_type
         self.created_at = created_at or datetime.utcnow()
         self.updated_at = updated_at or datetime.utcnow()
-        self.total_views = total_views
-        self.mistakes = mistakes
-        self.last_viewed_at = last_viewed_at or datetime.utcnow()
-        self.ease_factor = ease_factor  # Facilitate the appearance rate (lower = harder to remember)
+        self.deck = deck
+        self.user = user
 
     def save_to_db(self):
-        """Salva o cartão no banco de dados MongoDB"""
+        """Salva ou atualiza a carta no banco de dados MongoDB."""
         card_data = {
-            'front': self.front,
-            'back': self.back,
-            'created_at': self.created_at,
-            'updated_at': self.updated_at,
-            'total_views': self.total_views,
-            'mistakes': self.mistakes,
-            'last_viewed_at': self.last_viewed_at,
-            'ease_factor': self.ease_factor
+            "front": self.front,
+            "back": self.back,
+            "media_type": self.media_type,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
         }
-        result = mongo.db.cards.insert_one(card_data)
-        self.id = str(result.inserted_id)
-        return self
 
-    def update_performance(self, success):
-        """Atualiza o desempenho do card baseado na resposta do usuário"""
-        self.total_views += 1
-        if not success:
-            self.mistakes += 1
-            self.ease_factor = max(1.3, self.ease_factor - 0.15)  # Diminui o fator de facilidade
+        if self.id:
+            mongo.db.cards.update_one({"_id": ObjectId(self.id)}, {"$set": card_data})
         else:
-            self.ease_factor = min(2.5, self.ease_factor + 0.1)  # Aumenta o fator de facilidade
-        
-        self.last_viewed_at = datetime.utcnow()
-        mongo.db.cards.update_one(
-            {'_id': ObjectId(self.id)},
-            {'$set': {
-                'total_views': self.total_views,
-                'mistakes': self.mistakes,
-                'ease_factor': self.ease_factor,
-                'last_viewed_at': self.last_viewed_at
-            }}
-        )
+            result = mongo.db.cards.insert_one(card_data)
+            self.id = str(result.inserted_id)
+            if self.deck:
+                DeckModel.add_cards_to_deck(self.deck, [str(result.inserted_id)])
+                UserProgressModel.create_or_update(self.user, self.deck, self.id)
+
+    def delete_from_db(self):
+        """Remove a carta do banco de dados MongoDB."""
+        if self.id:
+            mongo.db.cards.delete_one({"_id": ObjectId(self.id)})
 
     @staticmethod
-    def get_card_by_id(card_id):
-        """Busca um card pelo ID"""
-        card_data = mongo.db.cards.find_one({'_id': ObjectId(card_id)})
-        if card_data:
-            return CardModel(**card_data)
+    def get_by_id(card_id):
+        """Busca um card pelo ID e retorna como dicionário"""
+        card = mongo.db.cards.find_one({"_id": ObjectId(card_id)})
+        if card:
+            result = CardModel(**card)
+            return result.to_dict()
         return None
-    
+
+    @staticmethod
+    def get_all_cards():
+        """Retorna uma lista de todas as cartas no banco de dados."""
+        cards = mongo.db.cards.find()
+        return [CardModel.from_dict(card) for card in cards]
+
+    @staticmethod
+    def from_dict(card_data):
+        """Converte um dicionário do MongoDB para uma instância de CardModel."""
+        return CardModel(
+            _id=card_data.get("_id"),
+            front=card_data.get("front"),
+            back=card_data.get("back"),
+            media_type=card_data.get("media_type", "text"),
+            created_at=card_data.get("created_at"),
+            updated_at=card_data.get("updated_at"),
+        )
+
     def to_dict(self):
-        """Converte o objeto CardModel para dicionário"""
+        """Converte a instância de CardModel para um dicionário."""
         return {
-            '_id': self.id,
-            'front': self.front,
-            'back': self.back,
-            'created_at': self.created_at,
-            'updated_at': self.updated_at,
-            'total_views': self.total_views,
-            'mistakes': self.mistakes,
-            'last_viewed_at': self.last_viewed_at,
-            'ease_factor': self.ease_factor
+            "_id": self.id,
+            "front": self.front,
+            "back": self.back,
+            "media_type": self.media_type,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
         }
-        
-    def delete_card(card_id):
-        """Deleta um card"""
-        result = mongo.db.cards.delete_one({'_id': ObjectId(card_id)})
-        return result.deleted_count > 0

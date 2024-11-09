@@ -1,29 +1,31 @@
 import jwt
 from functools import wraps
 from flask import request, jsonify, current_app
-from src.app.models.user_model import UserModel
+from ..models.user_model import UserModel
 
 
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         token = None
-        if 'Authorization' in request.headers:
-            token = request.headers['Authorization'].split(" ")[1]  # Bearer <token>
-        
+        if "Authorization" in request.headers:
+            token = request.headers["Authorization"].split(" ")[1]  # Bearer <token>
+
         if not token:
-            return jsonify({'message': 'Token is missing!'}), 401
-        
+            return jsonify({"message": "Token is missing!"}), 401
+
         try:
-            data = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=["HS256"])
-            current_user = UserModel.find_by_email(data['email'])
+            data = jwt.decode(
+                token, current_app.config["SECRET_KEY"], algorithms=["HS256"]
+            )
+            current_user = UserModel.find_by_email(data["email"])
             if not current_user:
-                return jsonify({'message': 'User not found!'}), 401
+                return jsonify({"message": "User not found!"}), 401
         except jwt.ExpiredSignatureError:
-            return jsonify({'message': 'Token has expired!'}), 401
+            return jsonify({"message": "Token has expired!"}), 401
         except jwt.InvalidTokenError:
-            return jsonify({'message': 'Invalid token!'}), 401
+            return jsonify({"message": "Invalid token!"}), 401
 
         return f(current_user, token, *args, **kwargs)
-    
+
     return decorated
