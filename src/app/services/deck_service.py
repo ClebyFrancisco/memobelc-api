@@ -14,3 +14,9 @@ class DeckService:
     @staticmethod
     def get_all_decks():
         return DeckModel.get_all_decks()
+
+    @staticmethod
+    def get_decks_by_masterdeck_id(masterdeck_id, user_id):
+        """This method returns all deck in masterdeck"""
+
+        return DeckModel.get_decks_by_masterdeck_id(masterdeck_id, user_id)

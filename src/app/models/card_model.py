@@ -1,11 +1,26 @@
+"""Model class for cards"""
+
 from datetime import datetime
 from bson import ObjectId
 from src.app import mongo
-from .deck_model import DeckModel
-from .user_progress_model import UserProgressModel
+from app.models.deck_model import DeckModel
+from app.models.user_progress_model import UserProgressModel
+
 
 class CardModel:
-    def __init__(self, _id=None, front=None, back=None, media_type="text", created_at=None, updated_at=None, deck=None, user=None):
+    """Class to handle model cards"""
+
+    def __init__(
+        self,
+        _id=None,
+        front=None,
+        back=None,
+        media_type="text",
+        created_at=None,
+        updated_at=None,
+        deck=None,
+        user=None,
+    ):
         """
         Inicializa um CardModel representando uma carta de estudo.
 
@@ -32,7 +47,7 @@ class CardModel:
             "back": self.back,
             "media_type": self.media_type,
             "created_at": self.created_at,
-            "updated_at": self.updated_at
+            "updated_at": self.updated_at,
         }
 
         if self.id:
@@ -43,7 +58,6 @@ class CardModel:
             if self.deck:
                 DeckModel.add_cards_to_deck(self.deck, [str(result.inserted_id)])
                 UserProgressModel.create_or_update(self.user, self.deck, self.id)
-            
 
     def delete_from_db(self):
         """Remove a carta do banco de dados MongoDB."""
@@ -52,9 +66,12 @@ class CardModel:
 
     @staticmethod
     def get_by_id(card_id):
-        """Busca uma carta no banco de dados por ID e retorna como instância de CardModel."""
-        card_data = mongo.db.cards.find_one({"_id": ObjectId(card_id)})
-        return CardModel.from_dict(card_data) if card_data else None
+        """Busca um card pelo ID e retorna como dicionário"""
+        card = mongo.db.cards.find_one({"_id": ObjectId(card_id)})
+        if card:
+            result = CardModel(**card)
+            return result.to_dict()
+        return None
 
     @staticmethod
     def get_all_cards():
@@ -71,7 +88,7 @@ class CardModel:
             back=card_data.get("back"),
             media_type=card_data.get("media_type", "text"),
             created_at=card_data.get("created_at"),
-            updated_at=card_data.get("updated_at")
+            updated_at=card_data.get("updated_at"),
         )
 
     def to_dict(self):
@@ -82,5 +99,5 @@ class CardModel:
             "back": self.back,
             "media_type": self.media_type,
             "created_at": self.created_at,
-            "updated_at": self.updated_at
+            "updated_at": self.updated_at,
         }
