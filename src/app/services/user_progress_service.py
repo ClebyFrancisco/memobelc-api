@@ -1,5 +1,6 @@
 from datetime import datetime
-from ..models.user_progress_model import UserProgressModel
+from app.models.user_progress_model import UserProgressModel
+
 
 class UserProgressService:
 

@@ -1,5 +1,6 @@
-from ..models.card_model import CardModel
+from app.models.card_model import CardModel
 from datetime import datetime
+
 
 class CardService:
     @staticmethod
@@ -8,9 +9,9 @@ class CardService:
         card = CardModel(
             front=data.get("front"),
             back=data.get("back"),
-            deck= data.get("deck_id"),
-            user= data.get("user_id"),
-            media_type=data.get("media_type", "text")
+            deck=data.get("deck_id"),
+            user=data.get("user_id"),
+            media_type=data.get("media_type", "text"),
         )
         card.save_to_db()
         return card.to_dict()

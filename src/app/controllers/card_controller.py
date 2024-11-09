@@ -1,9 +1,16 @@
+"""Module for handling cards-related endpoints."""
+
 from flask import Blueprint, jsonify, request
-from ..services.card_service import CardService
+from app.services.card_service import CardService
+
 
 class CardController:
+    """Class to handle cards operations"""
+
     @staticmethod
     def create_card():
+        """This Method create a card"""
+
         data = request.get_json()
         if not data.get("front") or not data.get("back"):
             return jsonify({"error": "Campos 'front' e 'back' são obrigatórios"}), 400
@@ -12,7 +19,9 @@ class CardController:
         return jsonify(result), 201
 
     @staticmethod
-    def get_card(card_id):
+    def get_card_by_id(card_id):
+        """This Method get a card by its id"""
+
         result = CardService.get_card_by_id(card_id)
         if result:
             return jsonify(result), 200
@@ -20,11 +29,14 @@ class CardController:
 
     @staticmethod
     def get_all_cards():
+        """This Method get all cards"""
         result = CardService.get_all_cards()
         return jsonify(result), 200
 
     @staticmethod
     def update_card(card_id):
+        """This Method update a card by id"""
+
         data = request.get_json()
         result = CardService.update_card(card_id, data)
         if result:
@@ -33,6 +45,8 @@ class CardController:
 
     @staticmethod
     def delete_card(card_id):
+        """This Method delete a card by id(its not recommended)."""
+
         if CardService.delete_card(card_id):
             return jsonify({"message": "Card excluído com sucesso"}), 200
         return jsonify({"error": "Card não encontrado"}), 404
@@ -45,6 +59,10 @@ card_blueprint = Blueprint("card_blueprint", __name__)
 card_blueprint.route("/", methods=["POST"])(CardController.create_card)
 card_blueprint.route("/", methods=["GET"])(CardController.get_all_cards)
 
-card_blueprint.route("/<string:card_id>", methods=["GET"])(CardController.get_card)
+card_blueprint.route("/<string:card_id>", methods=["GET"])(
+    CardController.get_card_by_id
+)
 card_blueprint.route("/<string:card_id>", methods=["PUT"])(CardController.update_card)
-card_blueprint.route("/<string:card_id>", methods=["DELETE"])(CardController.delete_card)
+card_blueprint.route("/<string:card_id>", methods=["DELETE"])(
+    CardController.delete_card
+)

@@ -1,6 +1,7 @@
 # src/app/services/deck_service.py
 
-from ..models.deck_model import DeckModel
+from app.models.deck_model import DeckModel
+
 
 class DeckService:
     @staticmethod
@@ -13,5 +14,3 @@ class DeckService:
     @staticmethod
     def get_all_decks():
         return DeckModel.get_all_decks()
-
-
