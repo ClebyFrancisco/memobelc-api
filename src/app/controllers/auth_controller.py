@@ -6,9 +6,9 @@ to handle both JSON and protobuf data formats, depending on the environment.
 """
 
 from flask import Blueprint, jsonify, request, Response, current_app
-from app.services.auth_service import AuthService
-from app.middlewares.token_required import token_required
-from app.proto.pb.auth import (
+from src.app.services.auth_service import AuthService
+from src.app.middlewares.token_required import token_required
+from src.app.proto.pb.auth import (
     LoginRequest,
     RefreshToken,
     RegisterRequest,

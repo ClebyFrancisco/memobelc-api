@@ -3,8 +3,8 @@
 from datetime import datetime
 from bson import ObjectId
 from src.app import mongo
-from app.models.deck_model import DeckModel
-from app.models.user_progress_model import UserProgressModel
+from src.app.models.deck_model import DeckModel
+from src.app.models.user_progress_model import UserProgressModel
 
 
 class CardModel:

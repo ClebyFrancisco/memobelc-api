@@ -1,6 +1,6 @@
 # src/app/services/deck_service.py
 
-from app.models.masterdeck_model import MasterDeckModel
+from src.app.models.masterdeck_model import MasterDeckModel
 
 
 class MasterDeckService:

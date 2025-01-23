@@ -5,8 +5,8 @@ from flask_mail import Message
 from werkzeug.security import generate_password_hash, check_password_hash
 from src.app import mail
 
-from app.models.user_model import UserModel
-from app.proto.pb.auth import LoginResponse
+from src.app.models.user_model import UserModel
+from src.app.proto.pb.auth import LoginResponse
 
 
 class AuthService:

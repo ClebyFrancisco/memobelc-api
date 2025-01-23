@@ -2,7 +2,7 @@
 
 from flask import Blueprint, jsonify, request
 
-from app.services.deck_service import DeckService
+from src.app.services.deck_service import DeckService
 
 
 class DecksController:

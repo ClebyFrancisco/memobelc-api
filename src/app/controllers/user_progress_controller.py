@@ -1,7 +1,7 @@
 """Module for handling userProgress-related endpoints."""
 
 from flask import Blueprint, jsonify, request
-from app.services.user_progress_service import UserProgressService
+from src.app.services.user_progress_service import UserProgressService
 
 
 class UserProgressController:

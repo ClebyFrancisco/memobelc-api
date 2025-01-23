@@ -1,7 +1,7 @@
 """Module for handling masterdecks-related endpoints."""
 
 from flask import Blueprint, jsonify, request, Response, current_app
-from app.services.masterdeck_service import MasterDeckService
+from src.app.services.masterdeck_service import MasterDeckService
 
 
 class MasterDecksController:

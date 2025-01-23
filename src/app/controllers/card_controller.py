@@ -1,7 +1,7 @@
 """Module for handling cards-related endpoints."""
 
 from flask import Blueprint, jsonify, request
-from app.services.card_service import CardService
+from src.app.services.card_service import CardService
 
 
 class CardController:

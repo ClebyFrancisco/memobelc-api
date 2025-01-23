@@ -4,11 +4,14 @@ from .database.mongo import mongo
 from .provider.mail import mail
 from .routes.routes import routes
 from .config import Config
+from flask_cors import CORS
 
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+
+    CORS(app)
 
     mongo.init_app(app)
     mail.init_app(app)

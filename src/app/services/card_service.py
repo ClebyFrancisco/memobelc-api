@@ -1,4 +1,4 @@
-from app.models.card_model import CardModel
+from src.app.models.card_model import CardModel
 from datetime import datetime
 
 

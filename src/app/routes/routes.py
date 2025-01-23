@@ -1,9 +1,9 @@
 from flask import Blueprint
-from app.controllers.auth_controller import auth_blueprint
-from app.controllers.masterdecks_controller import masterdeck_blueprint
-from app.controllers.decks_controller import decks_blueprint
-from app.controllers.card_controller import card_blueprint
-from app.controllers.user_progress_controller import user_progress_blueprint
+from src.app.controllers.auth_controller import auth_blueprint
+from src.app.controllers.masterdecks_controller import masterdeck_blueprint
+from src.app.controllers.decks_controller import decks_blueprint
+from src.app.controllers.card_controller import card_blueprint
+from src.app.controllers.user_progress_controller import user_progress_blueprint
 
 
 routes = Blueprint("main", __name__)
