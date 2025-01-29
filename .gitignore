@@ -9,9 +9,6 @@ frames/
 venv/
 .env
 
-**/proto/pb/*
-!**/proto/pb/
-!**/proto/pb/.gitkeep
 
 
 proto/pb/
