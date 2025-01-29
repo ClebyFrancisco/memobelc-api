@@ -15,6 +15,10 @@ Usage:
     python run.py
     ```
 """
+
+import sys
+sys.path.append('./src')
+
 from src.app import create_app
 from src.app import Config
 import os
