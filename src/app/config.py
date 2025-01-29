@@ -11,7 +11,7 @@ class Config:
     SECRET_KEY = environ["SECRET_KEY"]
 
     MAIL_SERVER = environ["MAIL_SERVER"]
-    
+    MAIL_PORT = environ["MAIL_PORT"]
     MAIL_USE_TLS = True
     MAIL_USE_SSL = False
     MAIL_USERNAME = environ["MAIL_USERNAME"]
@@ -19,3 +19,7 @@ class Config:
     MAIL_DEFAULT_SENDER = environ["MAIL_DEFAULT_SENDER"]
 
     FLASK_ENV = "development"
+    PORT = int(environ["PORT"])
+
+
+
