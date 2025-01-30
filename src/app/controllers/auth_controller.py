@@ -45,7 +45,7 @@ class AuthController:
                 data["name"], data["email"], data["password"]
             )
             if user:
-                return jsonify({"message": "User created successfully"}), 201
+                return jsonify({"message": "User created successfully", "token":user}), 201
 
             return jsonify({"error": "User already exists"}), 400
 
