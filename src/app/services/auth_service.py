@@ -38,8 +38,9 @@ class AuthService:
     @staticmethod
     def authenticate_user(email, password):
         user = UserModel.find_by_email(email)
-        is_confirmed = UserModel.verify_is_confirmed(user.email)
+        
         if user and check_password_hash(user.password, password):
+            is_confirmed = UserModel.verify_is_confirmed(user.email)
             token = jwt.encode(
                 {
                     "_id": user._id,
@@ -53,7 +54,7 @@ class AuthService:
 
             if is_confirmed:
                 if current_app.config["FLASK_ENV"] == "development":
-                    return {"token": token, "name": user.name, "email": user.email}
+                    return {"token": token, "name": user.name, "email": user.email, "user_id": user._id}
                 else:
                     return LoginResponse(token=token, name=user.name, email=user.email)
             else:
@@ -92,7 +93,7 @@ class AuthService:
             )
 
         if current_app.config["FLASK_ENV"] == "development":
-            return {"token": token, "name": user.name, "email": user.email}
+            return {"token": token, "name": user.name, "email": user.email, "user_id": user._id}
         else:
             return LoginResponse(token=token, name=user.name, email=user.email)
 

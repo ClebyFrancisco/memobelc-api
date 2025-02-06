@@ -4,12 +4,12 @@ from bson import ObjectId
 import string
 
 class UserModel:
-    def __init__(self, _id=None, name = None, email=None, password=None, masterdecks=None, **kwargs):
+    def __init__(self, _id=None, name = None, email=None, password=None, collections=None, **kwargs):
         self._id = str(_id) if _id else None
         self.name = name
         self.email = email
         self.password = password
-        self.masterdecks = masterdecks or []
+        self.collections = collections or []
 
 
     def save_to_db(self):
@@ -19,21 +19,21 @@ class UserModel:
             'email': self.email,
             'password': self.password,
             'is_confirmed': False,
-            "masterdecks": self.masterdecks
+            "collections": self.collections
         }
         mongo.db.users.insert_one(user_data)
         return True
     
     @staticmethod
-    def add_masterdecks_to_user(user_id, masterdeck_ids):
-        """Adiciona uma lista de masterdeck IDs ao user especificado"""
+    def add_collections_to_user(user_id, collection_ids):
+        """Adiciona uma lista de collection IDs ao user especificado"""
         # Converte os IDs de decks para ObjectId
-        masterdeck_object_ids = [ObjectId(masterdeck_id) for masterdeck_id in masterdeck_ids]
+        collection_object_ids = [ObjectId(collection_id) for collection_id in collection_ids]
         
-        # Atualiza o MasterDeck, adicionando os IDs dos masterdecks
+        # Atualiza o Collection, adicionando os IDs dos collections
         result = mongo.db.users.update_one(
             {"_id": ObjectId(user_id)},
-            {"$push": {"masterdecks": {"$each": masterdeck_object_ids}}}
+            {"$push": {"collections": {"$each": collection_object_ids}}}
         )
         
         return result.modified_count > 0
@@ -104,5 +104,5 @@ class UserModel:
             '_id': self._id,
             'name': self.name,
             'email': self.email,
-            'masterdecks': [str(ObjectId(masterdeck_id)) for masterdeck_id in self.masterdecks],
+            'collections': [str(ObjectId(collection_id)) for collection_id in self.collections],
         }

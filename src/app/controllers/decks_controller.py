@@ -14,11 +14,11 @@ class DecksController:
 
         data = request.get_json()
 
-        if "name" not in data:
+        if "name" or "collection_id" not in data:
             return jsonify({"error": "Missing required information"}), 400
         image = None
 
-        result = DeckService.create_deck(data["name"], data["masterdeck_id"], image)
+        result = DeckService.create_deck(data["name"], data["collection_id"], image)
         return jsonify(result), 200
 
     @staticmethod
@@ -29,16 +29,16 @@ class DecksController:
         return jsonify(result), 200
 
     @staticmethod
-    def get_decks_by_masterdeck_id():
+    def get_decks_by_collection_id():
         """This method get decks by user_id"""
 
-        masterdeck_id = request.args.get("masterdeck_id")
+        collection_id = request.args.get("collection_id")
         user_id = request.args.get("user_id")
 
-        if not masterdeck_id or not user_id:
+        if not collection_id or not user_id:
             return jsonify({"error": "info is required"}), 400
 
-        result = DeckService.get_decks_by_masterdeck_id(masterdeck_id, user_id)
+        result = DeckService.get_decks_by_collection_id(collection_id, user_id)
         return jsonify(result), 200
 
 
@@ -46,6 +46,6 @@ decks_blueprint = Blueprint("decks_blueprint", __name__)
 
 decks_blueprint.route("/create", methods=["POST"])(DecksController.create_deck)
 decks_blueprint.route("/get", methods=["GET"])(DecksController.get_all_decks)
-decks_blueprint.route("/get_by_masterdeck_id", methods=["GET"])(
-    DecksController.get_decks_by_masterdeck_id
+decks_blueprint.route("/get_by_collection_id", methods=["GET"])(
+    DecksController.get_decks_by_collection_id
 )

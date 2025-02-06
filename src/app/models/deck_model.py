@@ -2,7 +2,7 @@ import random
 from bson import ObjectId
 from datetime import datetime, timedelta
 from src.app import mongo
-from .masterdeck_model import MasterDeckModel
+from .collection_model import CollectionModel
 from .user_model import UserModel
 from .user_progress_model import UserProgressModel
 
@@ -14,7 +14,7 @@ class DeckModel:
         name=None,
         created_at=None,
         updated_at=None,
-        masterdeck_id=None,
+        collection_id=None,
         image=None,
         cards=None,
     ):
@@ -22,7 +22,7 @@ class DeckModel:
         self.name = name
         self.created_at = created_at or datetime.utcnow()
         self.updated_at = updated_at or datetime.utcnow()
-        self.masterdeck_id = masterdeck_id
+        self.collection_id = collection_id
         self.image = image
         self.cards = cards or []
 
@@ -46,9 +46,9 @@ class DeckModel:
         }
         result = mongo.db.decks.insert_one(deck_data)
         self.id = str(result.inserted_id)
-        if self.masterdeck_id:
-            MasterDeckModel.add_decks_to_masterdeck(
-                self.masterdeck_id, [str(result.inserted_id)]
+        if self.collection_id:
+            CollectionModel.add_decks_to_collection(
+                self.collection_id, [str(result.inserted_id)]
             )
         return True
 
@@ -64,7 +64,7 @@ class DeckModel:
         # Converte os IDs de decks para ObjectId
         cards_object_ids = [ObjectId(card_id) for card_id in cards_ids]
 
-        # Atualiza o MasterDeck, adicionando os IDs dos decks
+        # Atualiza o Collection, adicionando os IDs dos decks
         result = mongo.db.decks.update_one(
             {"_id": ObjectId(deck_id)},
             {
@@ -76,13 +76,13 @@ class DeckModel:
         return result.modified_count > 0
 
     @staticmethod
-    def get_decks_by_masterdeck_id(masterdeck_id, user_id):
+    def get_decks_by_collection_id(collection_id, user_id):
         """ "Busca todos os decks do user e retorna a quantidade de cartas totais e pendentes."""
-        masterdeck = MasterDeckModel.get_by_id(masterdeck_id)
+        collection = CollectionModel.get_by_id(collection_id)
 
         decks_list = []
 
-        for deck_id in masterdeck.get("decks", []):
+        for deck_id in collection.get("decks", []):
             deck = DeckModel.get_by_id(deck_id)
 
             pending_count = UserProgressModel.count_pending_cards(

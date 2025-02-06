@@ -5,7 +5,8 @@ login, token refresh, and code verification functionalities. Each method is set 
 to handle both JSON and protobuf data formats, depending on the environment.
 """
 
-from flask import Blueprint, jsonify, request, Response, current_app
+from flask import Blueprint, jsonify, request, Response, current_app, abort
+from werkzeug.exceptions import BadRequest, Unauthorized
 from src.app.services.auth_service import AuthService
 from src.app.middlewares.token_required import token_required
 from src.app.proto.pb.auth import (
@@ -83,13 +84,13 @@ class AuthController:
             data = request.get_json()
 
             if not data or "email" not in data or "password" not in data:
-                return jsonify({"error": "Email and password are required"}), 400
+                raise BadRequest(description="Email and password are required")
 
             token = AuthService.authenticate_user(data["email"], data["password"])
             if token:
                 return jsonify(token), 200
 
-            return jsonify({"error": "Invalid credentials"}), 401
+            raise Unauthorized(description="Invalid credentials")
 
         data = request.data
         login_request = LoginRequest().parse(data)
