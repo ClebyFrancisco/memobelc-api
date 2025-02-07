@@ -1,6 +1,7 @@
 """Module for handling cards-related endpoints."""
 
 from flask import Blueprint, jsonify, request
+from werkzeug.exceptions import BadRequest, Unauthorized
 from src.app.services.card_service import CardService
 
 
@@ -12,8 +13,8 @@ class CardController:
         """This Method create a card"""
 
         data = request.get_json()
-        if not data.get("front") or not data.get("back"):
-            return jsonify({"error": "Campos 'front' e 'back' são obrigatórios"}), 400
+        if ("front" or "back") not in data:
+            return BadRequest(description="the fields are mandatory")
 
         result = CardService.create_card(data)
         return jsonify(result), 201

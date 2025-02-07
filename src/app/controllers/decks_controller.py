@@ -14,9 +14,13 @@ class DecksController:
 
         data = request.get_json()
 
-        if "name" or "collection_id" not in data:
-            return jsonify({"error": "Missing required information"}), 400
-        image = None
+        if ("name" or "collection_id") not in data:
+            return jsonify({"error": "Missing required information11"}), 400
+        
+        if "image" in data:
+            image = data["image"]
+        else:
+            image = None
 
         result = DeckService.create_deck(data["name"], data["collection_id"], image)
         return jsonify(result), 200

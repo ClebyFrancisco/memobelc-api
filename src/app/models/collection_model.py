@@ -8,7 +8,7 @@ from .user_progress_model import UserProgressModel
 
 class CollectionModel:
     def __init__(self, _id=None, name=None, created_at=None, updated_at=None, image=None, decks=None, user=None):
-        self.id = str(_id) if _id else None
+        self._id = str(_id) if _id else None
         self.name = name
         self.created_at = created_at or datetime.utcnow()
         self.updated_at = updated_at or datetime.utcnow()
@@ -58,12 +58,15 @@ class CollectionModel:
         user = user.to_dict()
 
         collections_list = []
+        
     
         for collection_id in user.get("collections", []):
             collection = CollectionModel.get_by_id(collection_id)
 
-            total_cards = 0
-            pending_cards = 0
+            total_cards_in_collection = 0
+            pending_cards_in_collection = 0
+
+            list_deck_in_collection = []
             
             
             
@@ -73,18 +76,29 @@ class CollectionModel:
             for deck_id in collection.get("decks", []):
                 deck = DeckModel.get_by_id(deck_id)
 
+
+
                 # Conta o número total de cartas no deck
                 cards_count =  len(deck.get("cards", []))
-                total_cards += cards_count
+                total_cards_in_collection += cards_count
 
                 # Conta o número de cartas pendentes no UserProgressModel
                 pending_count = UserProgressModel.count_pending_cards(user_id, deck_id)
-                pending_cards += pending_count
+                pending_cards_in_collection += pending_count
+
+                deck.update({
+                    "total_cards": cards_count,
+                    "pending_cards": pending_count,
+
+                })
+
+                list_deck_in_collection.append(deck)
 
             # Adiciona contagens ao dicionário de dados do collection
             collection.update({
-                "total_cards": total_cards,
-                "pending_cards": pending_cards
+                "total_cards": total_cards_in_collection,
+                "pending_cards": pending_cards_in_collection,
+                "decks": list_deck_in_collection
             })
             
              # Adiciona collection à lista final
@@ -113,7 +127,7 @@ class CollectionModel:
     def to_dict(self):
         """Converte um documento collection para dicionário"""
         return {
-            '_id': self.id,
+            '_id': self._id,
             'name': self.name,
             'created_at': self.created_at,
             'updated_at': self.updated_at,

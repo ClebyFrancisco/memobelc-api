@@ -2,6 +2,7 @@
 
 from flask import Blueprint, jsonify, request, Response, current_app
 from src.app.services.collections_service import CollectionService
+from src.app.middlewares.token_required import token_required
 
 
 class CollectionsController:
@@ -37,14 +38,11 @@ class CollectionsController:
         return jsonify(result), 200
 
     @staticmethod
-    def get_collections_by_user():
+    @token_required
+    def get_collections_by_user(current_user, token):
         """This method get collections by user_id"""
-        user_id = request.args.get("user_id")
 
-        if not user_id:
-            return jsonify({"error": "User ID is required"}), 400
-
-        result = CollectionService.get_collections_by_user(user_id)
+        result = CollectionService.get_collections_by_user(current_user._id)
         return jsonify(result), 200
 
     @staticmethod
