@@ -1,30 +1,37 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from bson import ObjectId
 from src.app import mongo
 
 class UserProgressModel:
-    def __init__(self, user_id, deck_id, card_id, attempts=0, last_reviewed=None, next_review=None):
+    def __init__(self, _id=None, user_id=None, deck_id=None, card_id=None, attempts=0, last_reviewed=None, next_review=None):
+        self._id = str(_id) if _id else None
         self.user_id = ObjectId(user_id)
         self.deck_id = ObjectId(deck_id)
         self.card_id = ObjectId(card_id)
         self.attempts = attempts
-        self.last_reviewed = last_reviewed or datetime.utcnow()
+        self.last_reviewed = last_reviewed or datetime.now(timezone.utc)
         self.next_review = next_review or self.calculate_next_review()
 
-    def calculate_next_review(self):
-        """Define a próxima revisão com base no número de tentativas (espaçamento progressivo)."""
-        # Espaçamento básico: 1, 3, 7 dias (ou qualquer outro algoritmo desejado)
-        if self.attempts == 0:
-            return datetime.utcnow()
-        elif self.attempts == 1:
-            # return datetime.utcnow() + timedelta(days=1)
-            return datetime.utcnow() + timedelta(minutes=5)
-        elif self.attempts == 2:
-            return datetime.utcnow() + timedelta(days=3)
-        elif self.attempts == 3:
-            return datetime.utcnow() + timedelta(days=7)
+    def calculate_next_review(self, recall_level=None):
+        """Define a próxima revisão com base no recall_level e no número de tentativas."""
+        
+        if recall_level:
+        
+            spacing = {
+                "i_dont_remember": datetime.now(timezone.utc),  
+                "difficult": timedelta(days=1), 
+                "good": lambda attempts: timedelta(days=1 * (2 ** (attempts - 1))),
+                "easy": lambda attempts: timedelta(days=2 * (2 ** (attempts - 1))) 
+            }
+            
+            if recall_level in ["i_dont_remember", "difficult"]:
+                return datetime.now(timezone.utc) + spacing[recall_level]
+            
+            return datetime.now(timezone.utc) + spacing[recall_level](self.attempts)
+        
         else :
-            return datetime.utcnow() + timedelta(days=self.attempts*7)
+            return datetime.now(timezone.utc)
+
 
     def save_to_db(self):
         """Salva o progresso do usuário no banco de dados MongoDB."""
@@ -34,43 +41,69 @@ class UserProgressModel:
             "card_id": self.card_id,
             "attempts": self.attempts,
             "last_reviewed": None,
-            "next_review": datetime.utcnow()
+            "next_review": datetime.now(timezone.utc)
         }
         mongo.db.user_progress.insert_one(progress_data)
 
-    def update_status(self):
+    @staticmethod
+    def update_status(user_id, card_id, recall_level):
         """Atualiza o status da carta e recalcula a data de próxima revisão."""
-        self.attempts += 1
-        self.last_reviewed = datetime.utcnow()
-        self.next_review = self.calculate_next_review()
+        
+        query = {
+            "user_id": ObjectId(user_id),
+            "card_id": ObjectId(card_id)
+        }
+        
+        card_progress = mongo.db.user_progress.find_one(query)
+        progress = UserProgressModel(**card_progress)
+        
+        attempts = progress.attempts + 1
+        last_reviewed = progress.last_reviewed = datetime.now(timezone.utc)
+        next_review = progress.calculate_next_review(recall_level)
         mongo.db.user_progress.update_one(
-            {"user_id": self.user_id, "deck_id": self.deck_id, "card_id": self.card_id},
+            {"user_id": progress.user_id, "deck_id": progress.deck_id, "card_id": progress.card_id},
             {"$set": {
-                "attempts": self.attempts,
-                "last_reviewed": self.last_reviewed,
-                "next_review": self.next_review
+                "attempts": attempts,
+                "last_reviewed": last_reviewed,
+                "next_review": next_review
             }}
         )
+        
+        return "ok"
 
     @staticmethod
     def get_pending_cards(user_id, deck_id=None):
-        """Recupera cartas pendentes de revisão no dia atual."""
+        """Recupera cartas pendentes de revisão no dia atual, incluindo front e back."""
+        
         query = {
             "user_id": ObjectId(user_id),
-            "next_review": {"$lte": datetime.utcnow()},
+            "next_review": {"$lte": datetime.now(timezone.utc)},
         }
         if deck_id:
             query["deck_id"] = ObjectId(deck_id)
 
-        pending_cards = mongo.db.user_progress.find(query)
+        pipeline = [
+            {"$match": query},
+            {
+                "$lookup": {
+                    "from": "cards",
+                    "localField": "card_id",
+                    "foreignField": "_id",
+                    "as": "card_details"
+                }
+            },
+            {"$unwind": "$card_details"}
+        ]
+
+        pending_cards = mongo.db.user_progress.aggregate(pipeline)
+        
         return [
             {
-                "user_id": str(card["user_id"]),
-                "deck_id": str(card["deck_id"]),
                 "card_id": str(card["card_id"]),
-                "attempts": card["attempts"],
                 "last_reviewed": card["last_reviewed"],
-                "next_review": card["next_review"]
+                "next_review": card["next_review"],
+                "front": card["card_details"]["front"],
+                "back": card["card_details"]["back"]
             }
             for card in pending_cards
         ]
@@ -85,7 +118,7 @@ class UserProgressModel:
         })
 
         if existing_record:
-            # Atualiza o status se já existe um registro
+            
             user_progress = UserProgressModel(
                 user_id=existing_record["user_id"],
                 deck_id=existing_record["deck_id"],
@@ -96,21 +129,21 @@ class UserProgressModel:
             )
             user_progress.update_status()
         else:
-            # Cria um novo progresso se não existe
-            new_progress = UserProgressModel(user_id, deck_id, card_id)
+            
+            new_progress = UserProgressModel(user_id=user_id, deck_id=deck_id, card_id=card_id)
             new_progress.save_to_db()
 
     @staticmethod
     def count_pending_cards(user_id, deck_id=None):
-        # Define a query para buscar as cartas pendentes
+        
         query = {
             "user_id": ObjectId(user_id),
-            "next_review": {"$lte": datetime.utcnow()},
+            "next_review": {"$lte": datetime.now(timezone.utc)},
         }
-        # Se o deck_id foi passado, adiciona-o à query
+       
         if deck_id:
             query["deck_id"] = ObjectId(deck_id)
 
-        # Retorna a contagem de documentos que correspondem à query
+        
         pending_cards = mongo.db.user_progress.count_documents(query)
         return pending_cards

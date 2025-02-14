@@ -1,6 +1,6 @@
 """Model class for cards"""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from bson import ObjectId
 from src.app import mongo
 from src.app.models.deck_model import DeckModel
@@ -31,12 +31,12 @@ class CardModel:
         :param created_at: Data de criação (atualizado automaticamente se não fornecido)
         :param updated_at: Data de atualização (atualizado automaticamente se não fornecido)
         """
-        self.id = str(_id) if _id else None
+        self._id = str(_id) if _id else None
         self.front = front
         self.back = back
         self.media_type = media_type
-        self.created_at = created_at or datetime.utcnow()
-        self.updated_at = updated_at or datetime.utcnow()
+        self.created_at = created_at or datetime.now(timezone.utc)
+        self.updated_at = updated_at or datetime.now(timezone.utc)
         self.deck = deck
         self.user = user
 
@@ -50,19 +50,19 @@ class CardModel:
             "updated_at": self.updated_at,
         }
 
-        if self.id:
-            mongo.db.cards.update_one({"_id": ObjectId(self.id)}, {"$set": card_data})
+        if self._id:
+            mongo.db.cards.update_one({"_id": ObjectId(self._id)}, {"$set": card_data})
         else:
             result = mongo.db.cards.insert_one(card_data)
-            self.id = str(result.inserted_id)
+            self._id = str(result.inserted_id)
             if self.deck:
                 DeckModel.add_cards_to_deck(self.deck, [str(result.inserted_id)])
-                UserProgressModel.create_or_update(self.user, self.deck, self.id)
+                UserProgressModel.create_or_update(self.user, self.deck, str(result.inserted_id))
 
     def delete_from_db(self):
         """Remove a carta do banco de dados MongoDB."""
-        if self.id:
-            mongo.db.cards.delete_one({"_id": ObjectId(self.id)})
+        if self._id:
+            mongo.db.cards.delete_one({"_id": ObjectId(self._id)})
 
     @staticmethod
     def get_by_id(card_id):
@@ -94,7 +94,7 @@ class CardModel:
     def to_dict(self):
         """Converte a instância de CardModel para um dicionário."""
         return {
-            "_id": self.id,
+            "_id": self._id,
             "front": self.front,
             "back": self.back,
             "media_type": self.media_type,

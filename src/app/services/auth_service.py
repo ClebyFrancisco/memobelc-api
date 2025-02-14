@@ -1,5 +1,5 @@
 import jwt
-import datetime
+from datetime import datetime, timedelta, timezone
 from flask import current_app, jsonify
 from flask_mail import Message
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -25,7 +25,7 @@ class AuthService:
                 {
                     "_id": user._id,
                     "email": user.email,
-                    "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=72),
+                    "exp": datetime.now(timezone.utc) + datetime.timedelta(hours=72),
                 },
                 current_app.config["SECRET_KEY"],
                 algorithm="HS256",
@@ -45,8 +45,8 @@ class AuthService:
                 {
                     "_id": user._id,
                     "email": user.email,
-                    "exp": datetime.datetime.utcnow()
-                    + datetime.timedelta(hours=72 if is_confirmed else 0.25),
+                    "exp": datetime.now(timezone.utc)
+                    + timedelta(hours=72 if is_confirmed else 0.25),
                 },
                 current_app.config["SECRET_KEY"],
                 algorithm="HS256",
@@ -86,7 +86,7 @@ class AuthService:
                 {
                     "_id": user._id,
                     "email": user.email,
-                    "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=72),
+                    "exp": datetime.now(timezone.utc) + timedelta(hours=72),
                 },
                 current_app.config["SECRET_KEY"],
                 algorithm="HS256",
@@ -120,7 +120,7 @@ class AuthService:
         token_code = jwt.encode(
             {
                 "email": user.email,
-                "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1),
+                "exp": datetime.now(timezone.utc) + datetime.timedelta(hours=1),
             },
             current_app.config["SECRET_KEY"],
             algorithm="HS256",

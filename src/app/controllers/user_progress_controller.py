@@ -37,20 +37,28 @@ class UserProgressController:
 
     @staticmethod
     def update_card_status():
-        """This method updates the status of a card for a user"""
-
+        """This method updates the status of multiple cards for a user"""
+        
         data = request.get_json()
         user_id = data.get("user_id")
-        deck_id = data.get("deck_id")
-        card_id = data.get("card_id")
+        cards = data.get("cards", [])
 
-        if not all([user_id, deck_id, card_id]):
-            return jsonify({"error": "Missing required information"}), 400
+        if not user_id or not isinstance(cards, list):
+            return jsonify({"error": "Missing or invalid required information"}), 400
 
-        updated_progress = UserProgressService.update_card_status(
-            user_id, deck_id, card_id
-        )
+        updated_progress = []
+        for card in cards:
+            card_id = card.get("card_id")
+            recall_level = card.get("recall_level")
+            
+            if card_id and recall_level:
+                progress = UserProgressService.update_card_status(
+                    user_id, card_id, recall_level
+                )
+                updated_progress.append(progress)
+        
         return jsonify({"updated_progress": updated_progress}), 200
+
 
 
 # Blueprint para as rotas de progresso de usuário

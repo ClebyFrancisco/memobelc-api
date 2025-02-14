@@ -1,5 +1,5 @@
 from src.app.models.card_model import CardModel
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class CardService:
@@ -38,7 +38,7 @@ class CardService:
         card.front = data.get("front", card.front)
         card.back = data.get("back", card.back)
         card.media_type = data.get("media_type", card.media_type)
-        card.updated_at = datetime.utcnow()
+        card.updated_at = datetime.now(timezone.utc)
 
         card.save_to_db()
         return card.to_dict()

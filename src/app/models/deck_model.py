@@ -1,6 +1,6 @@
 import random
 from bson import ObjectId
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from src.app import mongo
 from .collection_model import CollectionModel
 from .user_model import UserModel
@@ -20,8 +20,8 @@ class DeckModel:
     ):
         self.id = str(_id) if _id else None
         self.name = name
-        self.created_at = created_at or datetime.utcnow()
-        self.updated_at = updated_at or datetime.utcnow()
+        self.created_at = created_at or datetime.now(timezone.utc)
+        self.updated_at = updated_at or datetime.now(timezone.utc)
         self.collection_id = collection_id
         self.image = image
         self.cards = cards or []
@@ -69,7 +69,7 @@ class DeckModel:
             {"_id": ObjectId(deck_id)},
             {
                 "$push": {"cards": {"$each": cards_object_ids}},
-                "$set": {"updated_at": datetime.utcnow()},
+                "$set": {"updated_at": datetime.now(timezone.utc)},
             },
         )
 

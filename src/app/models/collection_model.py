@@ -1,6 +1,6 @@
 import random
 from bson import ObjectId
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from src.app import mongo
 from .user_model import UserModel
 from .user_progress_model import UserProgressModel
@@ -10,8 +10,8 @@ class CollectionModel:
     def __init__(self, _id=None, name=None, created_at=None, updated_at=None, image=None, decks=None, user=None):
         self._id = str(_id) if _id else None
         self.name = name
-        self.created_at = created_at or datetime.utcnow()
-        self.updated_at = updated_at or datetime.utcnow()
+        self.created_at = created_at or datetime.now(timezone.utc)
+        self.updated_at = updated_at or datetime.now(timezone.utc)
         self.image = image
         self.decks = decks or []
         self.user = user
@@ -67,6 +67,7 @@ class CollectionModel:
             pending_cards_in_collection = 0
 
             list_deck_in_collection = []
+            review_collections_cards = []
             
             
             
@@ -85,12 +86,20 @@ class CollectionModel:
                 # Conta o número de cartas pendentes no UserProgressModel
                 pending_count = UserProgressModel.count_pending_cards(user_id, deck_id)
                 pending_cards_in_collection += pending_count
+                
+                
+                review_cards = UserProgressModel.get_pending_cards(user_id, deck_id)
+                
+                for card in review_cards:
+                    review_collections_cards.append(card)
 
                 deck.update({
                     "total_cards": cards_count,
                     "pending_cards": pending_count,
+                    "review_cards": review_cards
 
                 })
+                
 
                 list_deck_in_collection.append(deck)
 
@@ -98,7 +107,8 @@ class CollectionModel:
             collection.update({
                 "total_cards": total_cards_in_collection,
                 "pending_cards": pending_cards_in_collection,
-                "decks": list_deck_in_collection
+                "decks": list_deck_in_collection,
+                "review_collections_cards": review_collections_cards
             })
             
              # Adiciona collection à lista final
@@ -118,7 +128,7 @@ class CollectionModel:
         # Atualiza o Collection, adicionando os IDs dos decks
         result = mongo.db.collections.update_one(
             {"_id": ObjectId(collection_id)},
-            {"$push": {"decks": {"$each": deck_object_ids}}, "$set": {"updated_at": datetime.utcnow()}}
+            {"$push": {"decks": {"$each": deck_object_ids}}, "$set": {"updated_at": datetime.now(timezone.utc)}}
         )
         
         return result.modified_count > 0

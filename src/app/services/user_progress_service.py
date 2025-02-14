@@ -15,11 +15,10 @@ class UserProgressService:
         return UserProgressModel.get_pending_cards(user_id, deck_id)
 
     @staticmethod
-    def update_card_status(user_id, deck_id, card_id):
+    def update_card_status(user_id, card_id, recall_level):
         """Atualiza o status de uma carta específica no progresso do usuário."""
-        progress = UserProgressModel(user_id, deck_id, card_id)
-        progress.update_status()
-        return "ok"
+        progress = UserProgressModel.update_status(user_id, card_id, recall_level)
+        return progress
 
     @staticmethod
     def get_progress_for_card(user_id, deck_id, card_id):
