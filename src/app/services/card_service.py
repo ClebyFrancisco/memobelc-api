@@ -21,6 +21,12 @@ class CardService:
         """Busca um card pelo ID e o retorna como dicionário."""
         card = CardModel.get_by_id(card_id)
         return card.to_dict() if card else None
+    
+    @staticmethod
+    def get_cards_by_deck(deck_id):
+        """This method is responsible for get all cards in deck"""
+        
+        return CardModel.get_cards_by_deck(deck_id)
 
     @staticmethod
     def get_all_cards():

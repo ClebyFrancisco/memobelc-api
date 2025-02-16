@@ -27,6 +27,16 @@ class CardController:
         if result:
             return jsonify(result), 200
         return jsonify({"error": "Card não encontrado"}), 404
+    
+    @staticmethod
+    def get_cards_by_deck(deck_id):
+        "This Method is responsible for get all cards in deck"
+        
+        response = CardService.get_cards_by_deck(deck_id)
+        
+        if response:
+            return jsonify(response), 200
+        return jsonify('error'), 400
 
     @staticmethod
     def get_all_cards():
@@ -67,3 +77,4 @@ card_blueprint.route("/<string:card_id>", methods=["PUT"])(CardController.update
 card_blueprint.route("/<string:card_id>", methods=["DELETE"])(
     CardController.delete_card
 )
+card_blueprint.route("/get_cards_by_deck/<string:deck_id>", methods=['GET'])(CardController.get_cards_by_deck)

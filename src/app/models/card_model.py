@@ -72,6 +72,21 @@ class CardModel:
             result = CardModel(**card)
             return result.to_dict()
         return None
+    
+    @staticmethod
+    def get_cards_by_deck(deck_id):
+        deck = DeckModel.get_by_id(deck_id)
+        
+        list_cards = []
+        
+        for card_id in deck.get("cards", []):
+            card = mongo.db.cards.find_one({"_id": ObjectId(card_id)})
+            
+            card = CardModel(**card)
+            
+            list_cards.append(card.to_dict())
+            
+        return {'cards':list_cards}
 
     @staticmethod
     def get_all_cards():
