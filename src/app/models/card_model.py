@@ -56,9 +56,6 @@ class CardModel:
             result = mongo.db.cards.insert_one(card_data)
             self._id = str(result.inserted_id)
             return str(result.inserted_id)
-            if self.deck:
-                DeckModel.add_cards_to_deck(self.deck, [str(result.inserted_id)])
-                UserProgressModel.create_or_update(self.user, self.deck, str(result.inserted_id))
                 
                 
     @staticmethod
