@@ -55,9 +55,41 @@ class CardModel:
         else:
             result = mongo.db.cards.insert_one(card_data)
             self._id = str(result.inserted_id)
+            return str(result.inserted_id)
             if self.deck:
                 DeckModel.add_cards_to_deck(self.deck, [str(result.inserted_id)])
                 UserProgressModel.create_or_update(self.user, self.deck, str(result.inserted_id))
+                
+                
+    @staticmethod
+    def create_card_in_lots(name, image, cards):
+        """
+        Cria um objeto dentro de db.decks com name e image,
+        depois cria vários objetos de cards em db.cards e adiciona os ObjectId dos cards ao deck criado.
+        """
+        
+        # Criando o deck
+        deck_data = {
+            "name": name,
+            "image": image,
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
+            "cards": []
+        }
+        result = mongo.db.decks.insert_one(deck_data)
+        deck_id = str(result.inserted_id)
+        
+        # Criando os cards e coletando seus IDs
+        card_ids = []
+        for card in cards:
+            card_data = CardModel(**card)  # Supondo que CardModel aceite um dicionário de dados
+            card_id = card_data.save_to_db()  # Supondo que save_to_db retorne o ObjectId do card
+            card_ids.append(card_id)
+        
+        # Atualizando o deck com os IDs dos cards criados
+        DeckModel.add_cards_to_deck(deck_id, card_ids)
+        
+        return deck_id
 
     def delete_from_db(self):
         """Remove a carta do banco de dados MongoDB."""

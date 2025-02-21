@@ -23,6 +23,11 @@ class CardService:
         return card.to_dict() if card else None
     
     @staticmethod
+    def create_card_in_lots(name, image, cards):
+        result = CardModel.create_card_in_lots(name, image, cards)
+        return "ok"
+    
+    @staticmethod
     def get_cards_by_deck(deck_id):
         """This method is responsible for get all cards in deck"""
         

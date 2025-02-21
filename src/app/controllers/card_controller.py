@@ -18,6 +18,25 @@ class CardController:
 
         result = CardService.create_card(data)
         return jsonify(result), 201
+    
+    @staticmethod
+    def create_card_in_lots():
+        """Create cards in lote"""
+        
+        data = request.get_json()
+        
+        if ("cards") not in data:
+            return jsonify({"error": "Missing required information11"}), 400
+        
+        if "image" in data:
+            image = data["image"]
+        else:
+            image = None
+        
+        if ("deck_name") in data:
+            
+           response = CardService.create_card_in_lots(data["deck_name"], image, data["cards"])
+           return jsonify(response), 201
 
     @staticmethod
     def get_card_by_id(card_id):
@@ -78,3 +97,5 @@ card_blueprint.route("/<string:card_id>", methods=["DELETE"])(
     CardController.delete_card
 )
 card_blueprint.route("/get_cards_by_deck/<string:deck_id>", methods=['GET'])(CardController.get_cards_by_deck)
+card_blueprint.route("/create_card_in_lots", methods=["POST"])(CardController.create_card_in_lots)
+

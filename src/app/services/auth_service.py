@@ -25,7 +25,7 @@ class AuthService:
                 {
                     "_id": user._id,
                     "email": user.email,
-                    "exp": datetime.now(timezone.utc) + datetime.timedelta(hours=72),
+                    "exp": datetime.now(timezone.utc) + timedelta(hours=72),
                 },
                 current_app.config["SECRET_KEY"],
                 algorithm="HS256",
