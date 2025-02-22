@@ -18,6 +18,7 @@ class VideoController:
     @staticmethod
     def get_all_videos():
         
+        
         result = VideoService.get_all_videos()
         return jsonify(result), 201
 
@@ -25,5 +26,5 @@ class VideoController:
 
 video_blueprint = Blueprint("video_blueprint", __name__)
 
-video_blueprint.route("/", methods=["POST"])(VideoController.create_video)
-video_blueprint.route("/", methods=["GET"])(VideoController.get_all_videos)
+video_blueprint.route("/create", methods=["POST"])(VideoController.create_video)
+video_blueprint.route("/get", methods=["GET"])(VideoController.get_all_videos)

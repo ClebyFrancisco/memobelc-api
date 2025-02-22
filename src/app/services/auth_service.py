@@ -1,25 +1,25 @@
 import jwt
 from datetime import datetime, timedelta, timezone
-from flask import current_app, jsonify
+from flask import current_app
 from flask_mail import Message
 from werkzeug.security import generate_password_hash, check_password_hash
 from src.app import mail
-
 from src.app.models.user_model import UserModel
-from src.app.proto.pb.auth import LoginResponse
 
 
 class AuthService:
+    """Handles user authentication, including registration, login, and token management."""
 
     @staticmethod
     def create_user(name, email, password):
+        """Creates a new user and returns an authentication token."""
         if UserModel.find_by_email(email):
             return None
+
         hashed_password = generate_password_hash(password)
-
         UserModel(name=name, email=email, password=hashed_password).save_to_db()
-        user = UserModel.find_by_email(email)
 
+        user = UserModel.find_by_email(email)
         if user:
             token = jwt.encode(
                 {
@@ -30,88 +30,77 @@ class AuthService:
                 current_app.config["SECRET_KEY"],
                 algorithm="HS256",
             )
-            code = UserModel.generate_code(email)
-            AuthService.send_confirm_email(email, code)
+            AuthService.send_confirm_email(email, UserModel.generate_code(email))
             return token
+
         return None
 
     @staticmethod
     def authenticate_user(email, password):
+        """Authenticates a user and returns an access token."""
         user = UserModel.find_by_email(email)
-        
         if user and check_password_hash(user.password, password):
             is_confirmed = UserModel.verify_is_confirmed(user.email)
+            expiration = timedelta(hours=72 if is_confirmed else 0.25)
+
             token = jwt.encode(
                 {
                     "_id": user._id,
                     "email": user.email,
-                    "exp": datetime.now(timezone.utc)
-                    + timedelta(hours=72 if is_confirmed else 0.25),
+                    "exp": datetime.now(timezone.utc) + expiration,
                 },
                 current_app.config["SECRET_KEY"],
                 algorithm="HS256",
             )
 
-            if is_confirmed:
-                if current_app.config["FLASK_ENV"] == "development":
-                    return {"token": token, "name": user.name, "email": user.email, "user_id": user._id}
-                else:
-                    return LoginResponse(token=token, name=user.name, email=user.email)
-            else:
-                code = UserModel.generate_code(email)
-                AuthService.send_confirm_email(email, code)
-                if current_app.config["FLASK_ENV"] == "development":
-                    return {"pending": ["O Usuário não está confirmado!", token]}
-                else:
-                    return ErrorResponse(erro="O Usuário não está confirmado!")
+            return {"token": token, "name": user.name, "email": user.email, "user_id": user._id} if is_confirmed else {"pending": "User not confirmed!"}
 
         return None
 
     @staticmethod
     def verify_code(user, code):
-        code = UserModel.verify_code(user.email, code)
-        if code:
+        """Verifies a user's validation code and confirms their account."""
+        if UserModel.verify_code(user.email, code):
             UserModel.turn_confirmed(user.email)
             return True
-        else:
-            return False
+        return False
 
     @staticmethod
     def refresh_token(token):
-        data = jwt.decode(token, current_app.config["SECRET_KEY"], algorithms=["HS256"])
-        user = UserModel.find_by_email(data["email"])
+        """Refreshes the authentication token."""
+        try:
+            data = jwt.decode(token, current_app.config["SECRET_KEY"], algorithms=["HS256"])
+            user = UserModel.find_by_email(data["email"])
 
-        if user:
-            token = jwt.encode(
-                {
-                    "_id": user._id,
-                    "email": user.email,
-                    "exp": datetime.now(timezone.utc) + timedelta(hours=72),
-                },
-                current_app.config["SECRET_KEY"],
-                algorithm="HS256",
-            )
+            if user:
+                token = jwt.encode(
+                    {
+                        "_id": user._id,
+                        "email": user.email,
+                        "exp": datetime.now(timezone.utc) + timedelta(hours=72),
+                    },
+                    current_app.config["SECRET_KEY"],
+                    algorithm="HS256",
+                )
+                return {"token": token, "name": user.name, "email": user.email, "user_id": user._id}
 
-        if current_app.config["FLASK_ENV"] == "development":
-            return {"token": token, "name": user.name, "email": user.email, "user_id": user._id}
-        else:
-            return LoginResponse(token=token, name=user.name, email=user.email)
+        except jwt.ExpiredSignatureError:
+            return None
 
         return None
 
     @staticmethod
     def send_confirm_email(email, code):
-        msg = Message("Assunto Teste", recipients=[email])
-        msg.body = f"Aqui está seu codigo de validação: {code}"
-
+        """Sends a confirmation email with a verification code."""
+        msg = Message("Account Verification", recipients=[email])
+        msg.body = f"Your verification code is: {code}"
         mail.send(msg)
-
-        return "E-mail enviado!"
+        return "Email sent!"
 
     @staticmethod
     def forgot_password(email):
+        """Handles password recovery by sending a verification code."""
         user = UserModel.find_by_email(email)
-
         if not user:
             return None
 
@@ -120,9 +109,9 @@ class AuthService:
         token_code = jwt.encode(
             {
                 "email": user.email,
-                "exp": datetime.now(timezone.utc) + datetime.timedelta(hours=1),
+                "exp": datetime.now(timezone.utc) + timedelta(hours=1),
             },
             current_app.config["SECRET_KEY"],
             algorithm="HS256",
         )
-        return jsonify({"token": token_code}), 200
+        return {"token": token_code}
