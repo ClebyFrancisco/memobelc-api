@@ -9,6 +9,7 @@ class Config:
     PYTHONPATH = "src"
     MONGO_URI = environ["MONGO_URI"]
     SECRET_KEY = environ["SECRET_KEY"]
+    GENAI_API_KEY = environ["GENAI_API_KEY"]
 
     MAIL_SERVER = environ["MAIL_SERVER"]
     MAIL_PORT = environ["MAIL_PORT"]

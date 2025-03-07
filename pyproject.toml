@@ -46,6 +46,7 @@ werkzeug = "3.0.4"
 wheel = "0.43.0"
 flask-cors = "^5.0.0"
 gunicorn = "^23.0.0"
+google-generativeai = "^0.8.4"
 
 
 [tool.poetry.group.dev.dependencies]
