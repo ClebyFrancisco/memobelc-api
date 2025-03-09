@@ -1,6 +1,7 @@
 """Module for handling decks-related endpoints."""
 
 from flask import Blueprint, jsonify, request
+from werkzeug.exceptions import BadRequest, Unauthorized
 
 from src.app.services.deck_service import DeckService
 
@@ -44,6 +45,42 @@ class DecksController:
 
         result = DeckService.get_decks_by_collection_id(collection_id, user_id)
         return jsonify(result), 200
+    
+    @staticmethod
+    def save_deck():
+        """This method save the deck in user collection"""
+        
+        data = request.get_json()
+        
+        user_id = data.get("user_id")
+        deck_id = data.get("deck_id")
+        collection_id = data.get("collection_id")
+
+        if not all([user_id, deck_id, collection_id]):
+            return jsonify({"error": "Missing required information"}), 400
+        
+        result = DeckService.save_deck(user_id, deck_id, collection_id)
+        if result:
+            return jsonify(result), 200
+        else:
+            return BadRequest(description="error")
+        
+    @staticmethod
+    def check_if_the_user_has_the_deck():
+        """This method is responsible for verify if the deck has the user"""
+        
+        data = request.get_json()
+        
+        user_id = data.get("user_id")
+        deck_id = data.get("deck_id")
+
+        if not all([user_id, deck_id]):
+            return jsonify({"error": "Missing required information"}), 400
+        
+        response = DeckService.check_if_the_user_has_the_deck(user_id, deck_id)
+        
+        return jsonify(response), 200
+        
 
 
 decks_blueprint = Blueprint("decks_blueprint", __name__)
@@ -53,3 +90,5 @@ decks_blueprint.route("/get", methods=["GET"])(DecksController.get_all_decks)
 decks_blueprint.route("/get_by_collection_id", methods=["GET"])(
     DecksController.get_decks_by_collection_id
 )
+decks_blueprint.route("/save_deck", methods=["POST"])(DecksController.save_deck)
+decks_blueprint.route("/check_if_the_user_has_the_deck", methods=["POST"])(DecksController.check_if_the_user_has_the_deck)

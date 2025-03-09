@@ -8,8 +8,8 @@ class CollectionService:
     def create_collection(name, image=None, user=None):
         """Cria um novo mastdeck e o salva no banco de dados"""
         deck = CollectionModel(name=name, image=image, user=user)
-        deck.save_to_db()
-        return "Ok"
+        result = deck.save_to_db()
+        return result
 
     @staticmethod
     def get_by_id(deck_id):

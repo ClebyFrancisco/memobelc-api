@@ -21,3 +21,15 @@ class DeckService:
         """This method returns all deck in collection"""
 
         return DeckModel.get_decks_by_collection_id(collection_id, user_id)
+    
+    @staticmethod
+    def save_deck(user_id, deck_id, collection_id):
+        """This method is responsible for save deck in user"""
+    
+        return DeckModel.save_deck(user_id, deck_id, collection_id)
+    
+    @staticmethod
+    def check_if_the_user_has_the_deck(user_id, deck_id):
+        """This method is responsible for verify if the deck has the user"""
+        
+        return DeckModel.check_if_the_user_has_the_deck(user_id, deck_id)

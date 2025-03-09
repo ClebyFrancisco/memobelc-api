@@ -31,7 +31,7 @@ class CollectionModel:
         if self.user:
             UserModel.add_collections_to_user(self.user, [str(result.inserted_id)])
 
-        return True
+        return {"collection_id": str(result.inserted_id)}
     
     @staticmethod
     def get_all_collections():
