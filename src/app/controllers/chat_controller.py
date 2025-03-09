@@ -1,7 +1,6 @@
 """Module for handling chat-related endpoints."""
 
-from flask import Blueprint, jsonify, request
-from werkzeug.exceptions import BadRequest, Unauthorized
+from flask import Blueprint, request
 from src.app.middlewares.token_required import token_required
 from src.app.services.chat_service import ChatService
 
@@ -18,7 +17,11 @@ class ChatController:
         settings = data.get("settings", {})
         
         return ChatService.chat(current_user._id, id,  history, settings, message)
-       
+    
+    
+    def generate_card():
+        pass
+        
 
 
 chat_blueprint = Blueprint("chat_blueprint", __name__)
