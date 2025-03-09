@@ -22,4 +22,5 @@ class ChatController:
 
 
 chat_blueprint = Blueprint("chat_blueprint", __name__)
-chat_blueprint.route("/", methods=["POST"])(ChatController.chat)
+chat_blueprint.route("/talk_to_me", methods=["POST"])(ChatController.chat)
+chat_blueprint.route('/get_chats', methods=["GET"])(ChatController.generate_card)
