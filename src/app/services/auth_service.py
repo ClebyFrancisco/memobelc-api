@@ -41,6 +41,9 @@ class AuthService:
         user = UserModel.find_by_email(email)
         if user and check_password_hash(user.password, password):
             is_confirmed = UserModel.verify_is_confirmed(user.email)
+            
+            if not is_confirmed:
+                AuthService.send_confirm_email(email, UserModel.generate_code(email))
             expiration = timedelta(hours=72 if is_confirmed else 0.25)
 
             token = jwt.encode(
@@ -53,7 +56,7 @@ class AuthService:
                 algorithm="HS256",
             )
 
-            return {"token": token, "name": user.name, "email": user.email, "user_id": user._id} if is_confirmed else {"pending": "User not confirmed!"}
+            return {"token": token, "name": user.name, "email": user.email, "user_id": user._id} if is_confirmed else {"pending": ["User not confirmed!", token]}
 
         return None
 
