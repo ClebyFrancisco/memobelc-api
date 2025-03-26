@@ -14,7 +14,7 @@ class AuthController:
         if not data or not all(k in data for k in ["email", "password", "name"]):
             return jsonify({"error": "Missing required information"}), 400
 
-        token = AuthService.create_user(data["name"], data["email"], data["password"])
+        token = AuthService.create_user(data["name"], data["email"].lower(), data["password"])
         if token:
             return jsonify({"message": "User created successfully", "token": token}), 201
 
@@ -27,7 +27,7 @@ class AuthController:
         if not data or "email" not in data or "password" not in data:
             raise BadRequest(description="Email and password are required")
 
-        token = AuthService.authenticate_user(data["email"], data["password"])
+        token = AuthService.authenticate_user(data["email"].lower(), data["password"])
         if token:
             return jsonify(token), 200
 
