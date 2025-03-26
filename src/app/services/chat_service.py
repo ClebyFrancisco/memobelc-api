@@ -1,15 +1,11 @@
 from src.app.models.chat_model import ChatModel
+from flask import current_app
 from datetime import datetime, timezone
 import google.generativeai as genai
-
-from dotenv import load_dotenv
-from os import path, environ
-
-basedir = path.abspath(path.join(path.dirname(__file__), "../../"))
-load_dotenv(path.join(basedir, ".env"))
+from src.app.config import Config
 
 
-genai.configure(api_key=environ["GENAI_API_KEY"])
+genai.configure(api_key=Config.GENAI_API_KEY)
 
 
 class ChatService:
@@ -77,3 +73,71 @@ class ChatService:
             
 
             return {"reply": reply, "chat_id": id}
+        
+        
+        
+    def generate_card(chat_id, settings):
+        chat = ChatModel.get_by_id(chat_id=chat_id)
+
+        print(settings)
+        print(chat)
+
+        conversation_language = settings.get("language_conversation", "en")
+
+        pre_prompt = """
+            You must create a set of flashcards based on the provided conversation history.
+
+            🔹 **Objective:** Extract meaningful parts of the conversation and transform them into study cards.
+
+            🔹 **Response Format:** Return the flashcards in the following JSON format:
+
+            Translation into the user's native language use {conversation_language}
+
+            ```json
+            {
+                "cards": [
+                    {
+                        "front": "Text in the language the user is learning",
+                        "back": "Translation into the user's native language"
+                    }
+                ],
+                "deck_name": "A short and relevant name for the deck"
+            }```
+            
+            
+            lista de conversas:
+            """
+
+        history = chat['history']
+        
+        context = pre_prompt+history
+
+        model = genai.GenerativeModel('gemini-2.0-flash-thinking-exp-1219', system_instruction="Voce deve responder em formato de text.")
+        response = model.generate_content(context)
+
+        print('resposta ofc:  ', response.text)
+
+        # try:
+        #     # Extrair o texto da resposta correta
+        #     response_text = response.candidates[0].content.parts[0].text
+
+        #     # Converter o texto em JSON
+        #     response_json = json.loads(response_text)
+
+        #     # Acessar os dados JSON
+        #     cards = response_json["cards"]
+        #     deck_name = response_json["deck_name"]
+
+        #     for card in cards:
+        #         front = card["front"]
+        #         back = card["back"]
+        #         print(f"Frente: {front}, Verso: {back}")
+        #     print(f"Nome do Deck: {deck_name}")
+
+        #     return response_json # retorna o json para poder ser utilizado em outro lugar.
+
+        # except (AttributeError, KeyError, json.JSONDecodeError) as e:
+        #     print(f"Erro ao processar a resposta: {e}")
+        #     if hasattr(response, 'candidates') and response.candidates:
+        #         print(f"Texto da resposta crua: {response.candidates[0].content.parts[0].text}")
+        #         return None # Retorna None em caso de erro.

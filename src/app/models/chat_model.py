@@ -5,13 +5,13 @@ from src.app import mongo
 class ChatModel:
     """Class to handle chat model"""
 
-    def __init__(self, _id=None, user_id="", settings={}, history =[]):
+    def __init__(self, _id=None, user_id="", settings={}, history =[], created_at=None, updated_at=None,):
         self._id = str(_id) if _id else None
         self.user_id = ObjectId(user_id)
         self.settings = settings
         self.history = history or []
-        self.created_at = datetime.now(timezone.utc)
-        self.update_at = datetime.now(timezone.utc)
+        self.created_at = created_at or datetime.now(timezone.utc)
+        self.updated_at = updated_at or datetime.now(timezone.utc)
         
 
     def save_to_db(self):
@@ -30,6 +30,14 @@ class ChatModel:
             chat["_id"] = str(chat["_id"])
             chat["user_id"] = str(chat["user_id"])
         return chats
+    
+    @staticmethod
+    def get_by_id(chat_id):
+        chat = mongo.db.chats.find_one({'_id': ObjectId(chat_id)})
+        if chat:
+            result = ChatModel(**chat)
+            return result.to_dict()
+        return None
 
     @staticmethod
     def add_message(chat_id, role, message):
@@ -59,5 +67,5 @@ class ChatModel:
         "settings": self.settings,
         "history": self.history,
         "created_at": self.created_at,
-        "update_at": self.updated_at
+        "updated_at": self.updated_at
         }
