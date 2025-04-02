@@ -1,26 +1,33 @@
 from src.app import mongo
+from src.app.provider.stripe import Stripe
 import random
 from bson import ObjectId
 import string
 
 class UserModel:
-    def __init__(self, _id=None, name = None, email=None, password=None, collections=None, **kwargs):
+    def __init__(self, _id=None, name = None, email=None, password=None, collections=None, customer_id=None, **kwargs):
         self._id = str(_id) if _id else None
         self.name = name
         self.email = email
         self.password = password
         self.collections = collections or []
+        self.customer_id = customer_id
 
 
     def save_to_db(self):
         """Salva o usuário no banco de dados MongoDB"""
+        
+        customer = Stripe.create_customer(self.email)
         user_data = {
             'name': self.name,
             'email': self.email,
             'password': self.password,
             'is_confirmed': False,
-            "collections": self.collections
+            "collections": self.collections,
+            "customer_id": customer.get('id')
         }
+        
+        
         mongo.db.users.insert_one(user_data)
         return True
     
@@ -105,4 +112,5 @@ class UserModel:
             'name': self.name,
             'email': self.email,
             'collections': [str(ObjectId(collection_id)) for collection_id in self.collections],
+            'customer_id':self.customer_id
         }
