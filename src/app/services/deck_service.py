@@ -6,7 +6,7 @@ from src.app.models.deck_model import DeckModel
 class DeckService:
     @staticmethod
     def create_deck(name, collection_id, image=None):
-        """Cria um novo mastdeck e o salva no banco de dados"""
+        """Cria um novo deck e o salva no banco de dados"""
 
         deck = DeckModel(name=name, collection_id=collection_id, image=image)
         deck.save_to_db()
