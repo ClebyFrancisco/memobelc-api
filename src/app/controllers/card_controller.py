@@ -15,8 +15,19 @@ class CardController:
         data = request.get_json()
         if ("front" or "back") not in data:
             return BadRequest(description="the fields are mandatory")
+        
+        if "user_id" in data:
+            user_id = data["user_id"]
+        else:
+            user_id = None
+            
+        if "deck_id" in data:
+            deck_id = data["deck_id"]
+        else:
+            deck_id = None
 
-        result = CardService.create_card(data)
+
+        result = CardService.create_card(data['front'], data['back'], deck_id, user_id)
         return jsonify(result), 201
     
     @staticmethod
@@ -82,12 +93,12 @@ class CardController:
         return jsonify({"error": "Card não encontrado"}), 404
 
 
-# Blueprint para rotas de Card
+
 card_blueprint = Blueprint("card_blueprint", __name__)
 
-# Definindo as rotas
-card_blueprint.route("/", methods=["POST"])(CardController.create_card)
-card_blueprint.route("/", methods=["GET"])(CardController.get_all_cards)
+
+card_blueprint.route("/create", methods=["POST"])(CardController.create_card)
+card_blueprint.route("/get_all_cards", methods=["GET"])(CardController.get_all_cards)
 
 card_blueprint.route("/<string:card_id>", methods=["GET"])(
     CardController.get_card_by_id

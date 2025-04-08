@@ -4,14 +4,14 @@ from datetime import datetime, timezone
 
 class CardService:
     @staticmethod
-    def create_card(data):
+    def create_card(front, back, deck_id=None, user=None, media_type='text'):
         """Cria um novo card e o salva no banco de dados."""
         card = CardModel(
-            front=data.get("front"),
-            back=data.get("back"),
-            deck=data.get("deck_id"),
-            user=data.get("user_id"),
-            media_type=data.get("media_type", "text"),
+            front=front,
+            back=back,
+            deck=deck_id,
+            user=user,
+            media_type=media_type,
         )
         card.save_to_db()
         return card.to_dict()
