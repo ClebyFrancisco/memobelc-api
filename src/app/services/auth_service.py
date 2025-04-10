@@ -1,10 +1,12 @@
 import jwt
 from datetime import datetime, timedelta, timezone
-from flask import current_app
+from flask import current_app, jsonify
 from flask_mail import Message
 from werkzeug.security import generate_password_hash, check_password_hash
+from base64 import urlsafe_b64encode, urlsafe_b64decode
 from src.app import mail
 from src.app.models.user_model import UserModel
+from src.app.config import Config
 
 
 class AuthService:
@@ -102,19 +104,52 @@ class AuthService:
 
     @staticmethod
     def forgot_password(email):
-        """Handles password recovery by sending a verification code."""
+        """Handles password recovery by sending a secure password reset link."""
         user = UserModel.find_by_email(email)
         if not user:
             return None
 
-        code = UserModel.generate_code(email)
-        AuthService.send_confirm_email(email, code)
-        token_code = jwt.encode(
+        
+        encoded_id = urlsafe_b64encode(str(user._id).encode()).decode()
+
+        
+        reset_token = jwt.encode(
             {
-                "email": user.email,
-                "exp": datetime.now(timezone.utc) + timedelta(hours=1),
+                "reset_password": True,
+                "user_id": encoded_id,
+                "exp": datetime.now(timezone.utc) + timedelta(minutes=15),
             },
             current_app.config["SECRET_KEY"],
             algorithm="HS256",
         )
-        return {"token": token_code}
+
+        
+        base_frontend_url = Config.FRONT_BASE_URL
+        reset_link = f"{base_frontend_url}/reset_password?token={reset_token}"
+
+        msg = Message("Recuperação de senha", recipients=[email])
+        msg.body = f"Olá!\n\nClique no link abaixo para redefinir sua senha. Esse link é válido por 15 minutos:\n\n{reset_link}\n\nSe você não solicitou isso, ignore este e-mail."
+        mail.send(msg)
+        
+
+        return {"message": "E-mail de recuperação enviado com sucesso."}
+
+    @staticmethod
+    def reset_password(token, new_password):
+        payload = jwt.decode(token, current_app.config["SECRET_KEY"], algorithms=["HS256"])
+
+        if not payload.get("reset_password"):
+            return {"error": "Token inválido para redefinição de senha."}, 400
+
+           
+        if datetime.fromtimestamp(payload["exp"], timezone.utc) < datetime.now(timezone.utc):
+            return jsonify({"error": "Token expirado."}), 400
+        
+        decoded_id = urlsafe_b64decode(payload["user_id"].encode()).decode()
+        hashed_password = generate_password_hash(new_password)
+        
+        
+        response = UserModel.update_password(decoded_id, hashed_password)
+        
+        if response:
+            return jsonify("Password updated successfully!"), 200

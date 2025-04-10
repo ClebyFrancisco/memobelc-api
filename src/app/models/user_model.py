@@ -95,15 +95,21 @@ class UserModel:
         return code
         
         
-
-    def update_password(self, user_id,  new_password):
-        user_data = self.find_by_id(user_id)
+    @staticmethod
+    def update_password(user_id,  new_password):
+        user = UserModel.find_by_id(user_id)
         
-        if user_data:
-            return UserModel(**user_data)
-        return None
+        if user:
+            
+            mongo.db.users.update_one(
+                {"_id": ObjectId(user_id)},
+                {"$set": {'password': new_password}}
+            )
+            return True
+        
+        return False
     
-        mongo.db.users.update_one({'id': user_data.id}, {'$set': {'password': new_password}})
+        
 
     def to_dict(self):
         """Converte o objeto UserModel para dicionário"""

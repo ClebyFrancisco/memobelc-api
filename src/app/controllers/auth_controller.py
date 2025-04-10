@@ -45,7 +45,7 @@ class AuthController:
             return jsonify(token), 200
 
         return jsonify({"error": "Invalid credentials"}), 401
-
+                                                                                                                                                                                                                                                                                                                                                                
     @staticmethod
     @token_required
     def verify_code(current_user, token):
@@ -67,7 +67,23 @@ class AuthController:
         if "email" not in data:
             return jsonify({"error": "Email is required"}), 400
 
-        return AuthService.forgot_password(data["email"])
+        response = AuthService.forgot_password(data["email"])
+        if response:
+            
+            return jsonify(response), 200
+        return jsonify(), 400
+    
+    @staticmethod
+    def reset_password():
+        data = request.get_json()
+        
+        if not data or "password" not in data or 'token' not in data:
+            raise BadRequest(description="Email and password are required")
+        
+        response = AuthService.reset_password(data['token'], data['password'])
+        
+        return response
+        
 
 
 auth_blueprint = Blueprint("auth_blueprint", __name__)
@@ -77,3 +93,4 @@ auth_blueprint.route("/login", methods=["POST"])(AuthController.login)
 auth_blueprint.route("/refresh_token", methods=["POST"])(AuthController.refresh_token)
 auth_blueprint.route("/verify_code", methods=["POST"])(AuthController.verify_code)
 auth_blueprint.route("/forgot_password", methods=["POST"])(AuthController.forgot_password)
+auth_blueprint.route("/reset_password", methods=["PUT"])(AuthController.reset_password)
