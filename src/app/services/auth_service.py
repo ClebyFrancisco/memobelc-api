@@ -4,6 +4,7 @@ from flask import current_app, jsonify
 from flask_mail import Message
 from werkzeug.security import generate_password_hash, check_password_hash
 from base64 import urlsafe_b64encode, urlsafe_b64decode
+from werkzeug.exceptions import BadRequest, Unauthorized
 from src.app import mail
 from src.app.models.user_model import UserModel
 from src.app.config import Config
@@ -16,7 +17,7 @@ class AuthService:
     def create_user(name, email, password):
         """Creates a new user and returns an authentication token."""
         if UserModel.find_by_email(email):
-            return None
+            return jsonify({"message": "User already exists!"}), 409
 
         hashed_password = generate_password_hash(password)
         UserModel(name=name, email=email, password=hashed_password).save_to_db()
@@ -33,9 +34,9 @@ class AuthService:
                 algorithm="HS256",
             )
             AuthService.send_confirm_email(email, UserModel.generate_code(email))
-            return token
+            return jsonify({"message": "User created successfully", "token": token}), 201
 
-        return None
+        return BadRequest(description="An error has occurred!")
 
     @staticmethod
     def authenticate_user(email, password):

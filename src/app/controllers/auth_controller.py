@@ -15,10 +15,7 @@ class AuthController:
             return jsonify({"error": "Missing required information"}), 400
 
         token = AuthService.create_user(data["name"], data["email"].lower(), data["password"])
-        if token:
-            return jsonify({"message": "User created successfully", "token": token}), 201
-
-        return jsonify({"error": "User already exists"}), 400
+        return token
 
     @staticmethod
     def login():
