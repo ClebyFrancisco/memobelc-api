@@ -1,0 +1,52 @@
+
+from flask import Blueprint, jsonify, request, Response, current_app
+from werkzeug.exceptions import BadRequest, Unauthorized
+from src.app.services.collections_service import CollectionService
+from src.app.services.classroom_service import ClassroomService
+from src.app.middlewares.token_required import token_required
+
+class ClassroomController:
+    
+    @staticmethod
+    @token_required
+    def createClassroom(current_user, token):
+        data = request.get_json()
+        if ("collection_id") not in data:
+            return BadRequest(description="the fields are mandatory")
+        
+        if current_user.role != "teacher":
+            return Unauthorized(description="User Invalid!")
+        
+        result = ClassroomService.createClassroom(collection_id=data.get('collection_id'), user_id=current_user._id )
+        return jsonify(result), 200
+    
+    @staticmethod
+    @token_required
+    def getClassrooms(current_user, token):
+        
+        result = ClassroomService.getClassrooms(user_id=current_user._id)
+        return jsonify(result), 200
+    
+    
+    @staticmethod
+    @token_required
+    def add_students(current_user, token):
+        data = request.get_json()
+        if current_user.role != "teacher":
+            return Unauthorized(description="User Invalid!")
+        
+        if "classroom_id" not in data or "email_user" not in data:
+            return BadRequest(description="The fields 'classroom_id' and 'email_user' are mandatory")
+        
+        result = ClassroomService.add_students(classroom_id=data.get('classroom_id'), email_user=data.get('email_user'))
+        return jsonify(result), 200
+
+        
+        
+        
+classroom_blueprint = Blueprint("classroom_blueprint", __name__)
+classroom_blueprint.route("/create", methods=["POST"])(ClassroomController.createClassroom)
+classroom_blueprint.route("/get_classrooms", methods=['GET'])(ClassroomController.getClassrooms)
+classroom_blueprint.route("/add_user_in_classroom", methods=['POST'])(ClassroomController.add_students)
+
+        

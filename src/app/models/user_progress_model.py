@@ -120,16 +120,7 @@ class UserProgressModel:
         })
 
         if existing_record:
-            
-            user_progress = UserProgressModel(
-                user_id=existing_record["user_id"],
-                deck_id=existing_record["deck_id"],
-                card_id=existing_record["card_id"],
-                attempts=existing_record["attempts"],
-                last_reviewed=existing_record["last_reviewed"],
-                next_review=existing_record["next_review"]
-            )
-            user_progress.update_status()
+            return
         else:
             
             new_progress = UserProgressModel(user_id=user_id, deck_id=deck_id, card_id=card_id)

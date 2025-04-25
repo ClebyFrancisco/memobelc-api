@@ -5,13 +5,14 @@ from bson import ObjectId
 import string
 
 class UserModel:
-    def __init__(self, _id=None, name = None, email=None, password=None, collections=None, customer_id=None, **kwargs):
+    def __init__(self, _id=None, name = None, email=None, password=None, collections=None, customer_id=None, role='user', **kwargs):
         self._id = str(_id) if _id else None
         self.name = name
         self.email = email
         self.password = password
         self.collections = collections or []
         self.customer_id = customer_id
+        self.role = role
 
 
     def save_to_db(self):
@@ -24,7 +25,8 @@ class UserModel:
             'password': self.password,
             'is_confirmed': False,
             "collections": self.collections,
-            "customer_id": customer.get('id')
+            "customer_id": customer.get('id'),
+            "role": self.role
         }
         
         
@@ -34,13 +36,13 @@ class UserModel:
     @staticmethod
     def add_collections_to_user(user_id, collection_ids):
         """Adiciona uma lista de collection IDs ao user especificado"""
-        # Converte os IDs de decks para ObjectId
+        
         collection_object_ids = [ObjectId(collection_id) for collection_id in collection_ids]
         
-        # Atualiza o Collection, adicionando os IDs dos collections
+        
         result = mongo.db.users.update_one(
             {"_id": ObjectId(user_id)},
-            {"$push": {"collections": {"$each": collection_object_ids}}}
+            {"$addToSet": {"collections": {"$each": collection_object_ids}}}
         )
         
         return result.modified_count > 0
@@ -118,5 +120,6 @@ class UserModel:
             'name': self.name,
             'email': self.email,
             'collections': [str(ObjectId(collection_id)) for collection_id in self.collections],
-            'customer_id':self.customer_id
+            'customer_id':self.customer_id,
+            'role': self.role
         }

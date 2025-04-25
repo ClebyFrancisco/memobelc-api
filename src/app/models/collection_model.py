@@ -7,7 +7,7 @@ from .user_progress_model import UserProgressModel
 
 
 class CollectionModel:
-    def __init__(self, _id=None, name=None, created_at=None, updated_at=None, image=None, decks=None, user=None):
+    def __init__(self, _id=None, name=None, created_at=None, updated_at=None, image=None, decks=None, user=None, classroom=None):
         self._id = str(_id) if _id else None
         self.name = name
         self.created_at = created_at or datetime.now(timezone.utc)
@@ -15,6 +15,7 @@ class CollectionModel:
         self.image = image
         self.decks = decks or []
         self.user = user
+        self.classroom = classroom
 
     def save_to_db(self):
         """Salva o Masterdeck no banco de dados MongoDB"""
@@ -48,6 +49,15 @@ class CollectionModel:
             return result.to_dict()
         return None
     
+    
+    @staticmethod
+    def add_classroom(classroom_id, collection_id):
+        mongo.db.collections.update_one(
+            {"_id": ObjectId(collection_id)},
+            {"$set": {"classroom": ObjectId(classroom_id)}}
+        )
+
+    
 
     @staticmethod
     def get_collections_by_user(user_id):
@@ -73,17 +83,17 @@ class CollectionModel:
             
             from .deck_model import DeckModel
 
-            # Percorre cada deck associado ao collection
+            
             for deck_id in collection.get("decks", []):
                 deck = DeckModel.get_by_id(deck_id)
 
 
 
-                # Conta o número total de cartas no deck
+                
                 cards_count =  len(deck.get("cards", []))
                 total_cards_in_collection += cards_count
 
-                # Conta o número de cartas pendentes no UserProgressModel
+                
                 pending_count = UserProgressModel.count_pending_cards(user_id, deck_id)
                 pending_cards_in_collection += pending_count
                 
@@ -103,7 +113,7 @@ class CollectionModel:
 
                 list_deck_in_collection.append(deck)
 
-            # Adiciona contagens ao dicionário de dados do collection
+            
             collection.update({
                 "total_cards": total_cards_in_collection,
                 "pending_cards": pending_cards_in_collection,
@@ -111,7 +121,7 @@ class CollectionModel:
                 "review_collections_cards": review_collections_cards
             })
             
-             # Adiciona collection à lista final
+            
             collections_list.append(collection)
 
         return {
@@ -122,10 +132,10 @@ class CollectionModel:
     @staticmethod
     def add_decks_to_collection(collection_id, deck_ids):
         """Adiciona uma lista de deck IDs ao Collection especificado"""
-        # Converte os IDs de decks para ObjectId
+        
         deck_object_ids = [ObjectId(deck_id) for deck_id in deck_ids]
         
-        # Atualiza o Collection, adicionando os IDs dos decks
+        
         result = mongo.db.collections.update_one(
             {"_id": ObjectId(collection_id)},
             {"$push": {"decks": {"$each": deck_object_ids}}, "$set": {"updated_at": datetime.now(timezone.utc)}}
@@ -142,6 +152,7 @@ class CollectionModel:
             'created_at': self.created_at,
             'updated_at': self.updated_at,
             'image': self.image,
-            'decks': [str(ObjectId(deck_id)) for deck_id in self.decks]
+            'decks': [str(ObjectId(deck_id)) for deck_id in self.decks],
+            'classroom':str(self.classroom) if self.classroom else self.classroom
         }
 

@@ -59,7 +59,7 @@ class AuthService:
                 algorithm="HS256",
             )
 
-            return {"token": token, "name": user.name, "email": user.email, "user_id": user._id} if is_confirmed else {"pending": ["User not confirmed!", token]}
+            return {"token": token, "name": user.name, "email": user.email, "user_id": user._id, "role":user.role} if is_confirmed else {"pending": ["User not confirmed!", token]}
 
         return None
 
@@ -88,7 +88,7 @@ class AuthService:
                     current_app.config["SECRET_KEY"],
                     algorithm="HS256",
                 )
-                return {"token": token, "name": user.name, "email": user.email, "user_id": user._id}
+                return {"token": token, "name": user.name, "email": user.email, "user_id": user._id, "role":user.role}
 
         except jwt.ExpiredSignatureError:
             return None
