@@ -39,6 +39,31 @@ class CardModel:
         self.updated_at = updated_at or datetime.now(timezone.utc)
         self.deck = deck
         self.user = user
+    
+    @staticmethod    
+    def get_user_by_deck(deck_id):
+        collection_ids = mongo.db.collections.find(
+            { "decks": ObjectId(deck_id) },
+        )
+
+        collection_ids = [col['_id'] for col in collection_ids]
+        
+        pipeline = [
+            {
+                "$match": {
+                    "collections": { "$in": collection_ids }
+                }
+            },
+            {
+                "$project": {
+                    "_id": 1 
+                }
+            }
+        ]
+
+        user_ids = list(mongo.db.users.aggregate(pipeline))
+        user_ids = [str(user['_id']) for user in user_ids]
+        return(user_ids)
 
     def save_to_db(self):
         """Salva ou atualiza a carta no banco de dados MongoDB."""
@@ -49,6 +74,8 @@ class CardModel:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
+        
+        users = CardModel.get_user_by_deck(self.deck)        
 
         if self._id:
             mongo.db.cards.update_one({"_id": ObjectId(self._id)}, {"$set": card_data})
@@ -60,8 +87,10 @@ class CardModel:
             DeckModel.add_cards_to_deck(
                 self.deck, [str(result.inserted_id)]
             )
-        if self.user:
-            UserProgressModel.create_or_update(self.user, self.deck, self._id)
+            
+        for i in users:
+            UserProgressModel.create_or_update(i, self.deck, self._id)
+  
         return str(result.inserted_id)
                 
                 
@@ -83,14 +112,14 @@ class CardModel:
         result = mongo.db.decks.insert_one(deck_data)
         deck_id = str(result.inserted_id)
         
-        # Criando os cards e coletando seus IDs
+       
         card_ids = []
         for card in cards:
-            card_data = CardModel(**card)  # Supondo que CardModel aceite um dicionário de dados
-            card_id = card_data.save_to_db()  # Supondo que save_to_db retorne o ObjectId do card
+            card_data = CardModel(**card)
+            card_id = card_data.save_to_db()
             card_ids.append(card_id)
         
-        # Atualizando o deck com os IDs dos cards criados
+        
         DeckModel.add_cards_to_deck(deck_id, card_ids)
         
         return deck_id
