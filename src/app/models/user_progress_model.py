@@ -105,7 +105,8 @@ class UserProgressModel:
                 "last_reviewed": card["last_reviewed"],
                 "next_review": card["next_review"],
                 "front": card["card_details"]["front"],
-                "back": card["card_details"]["back"]
+                "back": card["card_details"]["back"],
+                "audio": card["card_details"].get("audio",  None),
             }
             for card in pending_cards
         ]

@@ -15,6 +15,7 @@ class CardModel:
         _id=None,
         front=None,
         back=None,
+        audio=None,
         media_type="text",
         created_at=None,
         updated_at=None,
@@ -34,6 +35,7 @@ class CardModel:
         self._id = str(_id) if _id else None
         self.front = front
         self.back = back
+        self.audio = audio
         self.media_type = media_type
         self.created_at = created_at or datetime.now(timezone.utc)
         self.updated_at = updated_at or datetime.now(timezone.utc)
@@ -70,6 +72,7 @@ class CardModel:
         card_data = {
             "front": self.front,
             "back": self.back,
+            "audio":self.audio,
             "media_type": self.media_type,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
@@ -177,6 +180,7 @@ class CardModel:
             "_id": self._id,
             "front": self.front,
             "back": self.back,
+            "audio": self.audio,
             "media_type": self.media_type,
             "created_at": self.created_at,
             "updated_at": self.updated_at,

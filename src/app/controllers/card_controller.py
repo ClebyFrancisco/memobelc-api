@@ -25,9 +25,14 @@ class CardController:
             deck_id = data["deck_id"]
         else:
             deck_id = None
+            
+        if "audio" in data:
+            audio = data['audio']
+        else:
+            audio = None
 
 
-        result = CardService.create_card(data['front'], data['back'], deck_id, user_id)
+        result = CardService.create_card(data['front'], data['back'], deck_id, user_id, audio)
         return jsonify(result), 201
     
     @staticmethod
