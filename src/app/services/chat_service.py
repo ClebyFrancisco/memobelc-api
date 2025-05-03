@@ -74,6 +74,12 @@ class ChatService:
 
             return {"reply": reply, "chat_id": id}
         
+    @staticmethod
+    def get_chats_by_user_id(user_id):
+        result = ChatModel.get_by_user_id(user_id)
+        
+        return {"chats": result}
+        
         
         
     def generate_card(chat_id, settings):
