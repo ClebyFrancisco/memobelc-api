@@ -13,6 +13,7 @@ class Config:
     PRICE_ID = environ['PRICE_ID']
     STRIPE_WHSEC = environ["STRIPE_WHSEC"]
     GENAI_API_KEY = environ["GENAI_API_KEY"]
+    GENAI_MODEL = environ["GENAI_MODEL"]
 
     MAIL_SERVER = environ["MAIL_SERVER"]
     MAIL_PORT = environ["MAIL_PORT"]

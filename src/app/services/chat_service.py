@@ -11,6 +11,7 @@ genai.configure(api_key=Config.GENAI_API_KEY)
 class ChatService:
     @staticmethod
     def chat(user_id, id,  history, settings, message):
+
         
         conversation_language = settings.get("language_conversation", "en")  
         explanation_language = settings.get("explanation_language", conversation_language)
@@ -54,7 +55,7 @@ class ChatService:
         )
 
 
-        model = genai.GenerativeModel('learnlm-1.5-pro-experimental', system_instruction=pre_prompt)
+        model = genai.GenerativeModel(Config.GENAI_MODEL, system_instruction=pre_prompt)
 
         chat = model.start_chat(history=history)
         response = chat.send_message(message)
@@ -63,7 +64,6 @@ class ChatService:
         if not id:
             chat = ChatModel(user_id=user_id, settings=settings, history=history)
             chat_id = chat.save_to_db()
-            chat.add_message(chat_id=chat_id, role='user', message=message)
             chat.add_message(chat_id=chat_id, role='model', message=response.text)
             return {"reply": reply, "chat_id": chat_id}
             
