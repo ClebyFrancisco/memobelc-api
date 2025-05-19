@@ -18,15 +18,15 @@ class UserProgressModel:
         if recall_level:
         
             spacing = {
-                "i_dont_remember": "",  
-                "difficult": timedelta(days=1), 
-                "good": lambda attempts: timedelta(days=1 * (2 ** (attempts - 1))),
-                "easy": lambda attempts: timedelta(days=2 * (2 ** (attempts - 1))) 
+                "I don't remember": "",  
+                "Difficult": timedelta(days=1), 
+                "Good": lambda attempts: timedelta(days=1 * (2 ** (attempts - 1))),
+                "Easy": lambda attempts: timedelta(days=2 * (2 ** (attempts - 1))) 
             }
-            if recall_level in ["i_dont_remember"]:
+            if recall_level in ["I don't remember"]:
                 return datetime.now(timezone.utc)
             
-            if recall_level in ["difficult"]:
+            if recall_level in ["Difficult"]:
                 return datetime.now(timezone.utc) + spacing[recall_level]
             
             return datetime.now(timezone.utc) + spacing[recall_level](self.attempts)
