@@ -3,6 +3,8 @@ from flask import current_app
 from datetime import datetime, timezone
 import google.generativeai as genai
 from src.app.config import Config
+import json
+import re
 
 
 genai.configure(api_key=Config.GENAI_API_KEY)
@@ -81,69 +83,97 @@ class ChatService:
         return {"chats": result}
         
         
-        
+    @staticmethod   
     def generate_card(chat_id, settings):
         chat = ChatModel.get_by_id(chat_id=chat_id)
-
-        print(settings)
-        print(chat)
-
+        
+        settings_collection_id= settings.get("collection_id", None)
         conversation_language = settings.get("language_conversation", "en")
 
-        pre_prompt = """
-            You must create a set of flashcards based on the provided conversation history.
+        pre_prompt_template = """
+        You must create a set of flashcards based on the provided conversation history.
 
-            🔹 **Objective:** Extract meaningful parts of the conversation and transform them into study cards.
+        🔹 **Objective:** Extract meaningful parts of the conversation and transform them into study cards.
 
-            🔹 **Response Format:** Return the flashcards in the following JSON format:
+        🔹 **Response Format:** Return the flashcards in the following text 
 
-            Translation into the user's native language use {conversation_language}
-
-            ```json
-            {
-                "cards": [
-                    {
-                        "front": "Text in the language the user is learning",
-                        "back": "Translation into the user's native language"
-                    }
-                ],
-                "deck_name": "A short and relevant name for the deck"
-            }```
-            
-            
-            lista de conversas:
-            """
-
-        history = chat['history']
+        Translation into the user's native language use {conversation_language}
         
-        context = pre_prompt+history
+        settings_collection_id = {collection_id}
 
-        model = genai.GenerativeModel('gemini-2.0-flash-thinking-exp-1219', system_instruction="Voce deve responder em formato de text.")
-        response = model.generate_content(context)
+        format:
+        {{
+            "cards": [
+                {{
+                    "front": "Text in the language the user is learning",
+                    "back": "Translation into the user's native language"
+                }}
+            ],
+            "deck_name": "A short and relevant name for the deck",
+            "collection_name": "A short name and relavant for collection(deck of deck) case settings_collection_id == None
+        }}
 
-        print('resposta ofc:  ', response.text)
+        conversation list:
+        {history}
+        """
+        history = chat['history']
 
-        # try:
-        #     # Extrair o texto da resposta correta
-        #     response_text = response.candidates[0].content.parts[0].text
 
-        #     # Converter o texto em JSON
-        #     response_json = json.loads(response_text)
+        pre_prompt = pre_prompt_template.format(
+            conversation_language=conversation_language,
+            history=history,
+            collection_id=settings_collection_id
+        )
 
-        #     # Acessar os dados JSON
-        #     cards = response_json["cards"]
-        #     deck_name = response_json["deck_name"]
 
-        #     for card in cards:
-        #         front = card["front"]
-        #         back = card["back"]
-        #         print(f"Frente: {front}, Verso: {back}")
-        #     print(f"Nome do Deck: {deck_name}")
 
-        #     return response_json # retorna o json para poder ser utilizado em outro lugar.
 
-        # except (AttributeError, KeyError, json.JSONDecodeError) as e:
-        #     print(f"Erro ao processar a resposta: {e}")
-        #     if hasattr(response, 'candidates') and response.candidates:
-        #         print(f"Texto da resposta crua: {response.candidates[0].content.parts[0].text}")
-        #         return None # Retorna None em caso de erro.
+        model = genai.GenerativeModel(Config.GENAI_MODEL)
+        response = model.generate_content(pre_prompt)
+        
+        json_str = re.sub(r'^```json|```$', '', response.text.strip(), flags=re.MULTILINE).strip()
+
+        
+        data = json.loads(json_str)
+        return {"flashcards": data}
+    
+    @staticmethod
+    def generate_cards_by_subject(subject, amount, language_front, language_back, deck_id=None, deck_name=None):
+        print(subject, amount, deck_id, deck_name, language_front, language_back)
+        
+        pre_prompt_template = """
+        You must create a set of flashcards with {amount} cards, based on {subject}.
+        
+        **Response Format:** Return the flashcards in the following text
+    
+        
+        format:
+        {{
+            "cards": [
+                {{
+                    "front": "Text in the language {language_front}",
+                    "back": "Translation {language_back} language"
+                }}
+            ],
+            "deck_name": "A short and relevant name for the deck",
+            "collection_name": "A short name and relavant for collection(deck of deck) case settings_collection_id == None
+        }}
+        """
+        
+        pre_prompt = pre_prompt_template.format(
+            amount=amount, 
+            subject=subject,
+            language_front=language_front,
+            language_back=language_back
+        )
+        
+        model = genai.GenerativeModel(Config.GENAI_MODEL)
+        response = model.generate_content(pre_prompt)
+        
+        json_str = re.sub(r'^```json|```$', '', response.text.strip(), flags=re.MULTILINE).strip()
+
+        
+        data = json.loads(json_str)
+        return {"flashcards": data}
+
+        

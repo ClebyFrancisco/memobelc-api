@@ -24,12 +24,13 @@ class ChatController:
         response = ChatService.get_chats_by_user_id(current_user._id)
         return jsonify(response), 200
     
-    def generate_card():
-        pass
-        
-
+    def generate_cards_by_chat():
+        data = request.get_json()
+        response = ChatService.generate_card(chat_id=data.get('chat_id'), settings=data.get('settings'))
+        return jsonify(response), 200
+    
 
 chat_blueprint = Blueprint("chat_blueprint", __name__)
 chat_blueprint.route("/talk_to_me", methods=["POST"])(ChatController.chat)
 chat_blueprint.route("/get_chats_by_user", methods=["GET"])(ChatController.get_chats_by_user_id)
-chat_blueprint.route('/get_chats', methods=["GET"])(ChatController.generate_card)
+chat_blueprint.route('/generate_card', methods=["POST"])(ChatController.generate_cards_by_chat)

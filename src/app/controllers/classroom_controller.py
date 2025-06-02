@@ -3,6 +3,7 @@ from flask import Blueprint, jsonify, request, Response, current_app
 from werkzeug.exceptions import BadRequest, Unauthorized
 from src.app.services.collections_service import CollectionService
 from src.app.services.classroom_service import ClassroomService
+from src.app.services.chat_service import ChatService
 from src.app.middlewares.token_required import token_required
 
 class ClassroomController:
@@ -40,6 +41,41 @@ class ClassroomController:
         
         result = ClassroomService.add_students(classroom_id=data.get('classroom_id'), email_user=data.get('email_user'))
         return jsonify(result), 200
+    
+    
+    def generate_cards_by_subject():
+        data = request.get_json()
+        
+        if "subject" not in data:
+            return jsonify({"error": "Subject is required!"}), 400
+        
+        if "amount" in data:
+            amount = data["amount"]
+        else:
+            amount = 20
+            
+        if "deck_id" not in data and "deck_name" not in data:
+            return jsonify({"error":"deck information is required"}), 400
+        
+        if "language_front" not in data or "language_back" not in data:
+            return jsonify({"error":"language of cards front and back is required"}), 400
+            
+        if "deck_id" in data:
+            deck_id = data["deck_id"]
+        else:
+            deck_id = None
+            
+        if "deck_name" in data:
+            deck_name = data["deck_name"]
+        else:
+            deck_name = None
+            
+        response = ChatService.generate_cards_by_subject(subject=data.get("subject"), 
+                                                         amount=amount, deck_id=deck_id, 
+                                                         deck_name=deck_name, 
+                                                         language_front=data.get("language_front"), 
+                                                         language_back=data.get("language_back"))
+        return jsonify(response), 200
 
         
         
@@ -48,5 +84,6 @@ classroom_blueprint = Blueprint("classroom_blueprint", __name__)
 classroom_blueprint.route("/create", methods=["POST"])(ClassroomController.createClassroom)
 classroom_blueprint.route("/get_classrooms", methods=['GET'])(ClassroomController.getClassrooms)
 classroom_blueprint.route("/add_user_in_classroom", methods=['POST'])(ClassroomController.add_students)
+classroom_blueprint.route("/generate_cards_by_subject", methods=["POST"])(ClassroomController.generate_cards_by_subject)
 
         

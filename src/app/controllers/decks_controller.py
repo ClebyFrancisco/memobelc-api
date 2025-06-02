@@ -16,7 +16,7 @@ class DecksController:
         data = request.get_json()
 
         if ("name" or "collection_id") not in data:
-            return jsonify({"error": "Missing required information11"}), 400
+            return jsonify({"error": "Missing required information"}), 400
         
         if "image" in data:
             image = data["image"]

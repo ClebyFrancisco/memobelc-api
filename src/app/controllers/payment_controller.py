@@ -8,7 +8,7 @@ class PaymentController:
     @staticmethod
     @token_required
     def create_subscription(current_user, token):
-        response = PaymentService.create_subscription(current_user)
+        response = PaymentService.create_subscription(current_user._id)
         return jsonify(response), 200
     
     
