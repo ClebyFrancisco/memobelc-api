@@ -135,6 +135,13 @@ class ClassroomModel:
             {"$addToSet": {"guests": {"$each": [email]}}}
         )
         
+    @staticmethod
+    def remove_user_guest(classroom_id, email):
+        mongo.db.classrooms.update_one(
+            {"_id": ObjectId(classroom_id)},
+            { "$pull": { "guests": email } }
+        )
+        
     def to_dict(self):
         """Converte um documento classroom para dicionário"""
         return {

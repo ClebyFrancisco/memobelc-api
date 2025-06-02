@@ -7,6 +7,7 @@ from base64 import urlsafe_b64encode, urlsafe_b64decode
 from werkzeug.exceptions import BadRequest, Unauthorized
 from src.app import mail
 from src.app.models.user_model import UserModel
+from src.app.models.classroom_model import ClassroomModel
 from src.app.config import Config
 
 
@@ -68,6 +69,13 @@ class AuthService:
         """Verifies a user's validation code and confirms their account."""
         if UserModel.verify_code(user.email, code):
             UserModel.turn_confirmed(user.email)
+            
+            classrooms = UserModel.verify_user_is_guest(user._id)
+            
+            if len(classrooms) > 0:
+                for classroom in classrooms:
+                    ClassroomModel.add_students(classroom.get('_id'), user._id)
+                    ClassroomModel.remove_user_guest(classroom.get('_id'), user.email)
             return True
         return False
 

@@ -111,6 +111,23 @@ class UserModel:
         
         return False
     
+    @staticmethod
+    def verify_user_is_guest(user_id):
+        user = UserModel.find_by_id(user_id)
+        
+        if not user or not hasattr(user, 'email'):
+            return [] 
+
+        result = mongo.db.classrooms.find({'guests': user.email})
+
+        list_classrooms = []
+        
+        for classroom in result:
+            list_classrooms.append({'_id': str(classroom.get('_id'))})
+        
+        return list_classrooms
+
+    
         
 
     def to_dict(self):
