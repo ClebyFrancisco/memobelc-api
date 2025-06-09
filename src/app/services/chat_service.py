@@ -138,11 +138,11 @@ class ChatService:
         return {"flashcards": data}
     
     @staticmethod
-    def generate_cards_by_subject(subject, amount, language_front, language_back, deck_id=None, deck_name=None):
-        print(subject, amount, deck_id, deck_name, language_front, language_back)
+    def generate_cards_by_subject(subject, amount, language_front, language_back, deck_id=None, deck_name=None, format=None):
+        print(subject, amount, deck_id, deck_name, language_front, language_back, format)
         
         pre_prompt_template = """
-        You must create a set of flashcards with {amount} cards, based on {subject}.
+        You must create a set of flashcards with {amount} cards, based on {subject}, {format}.
         
         **Response Format:** Return the flashcards in the following text
     
@@ -155,8 +155,6 @@ class ChatService:
                     "back": "Translation {language_back} language"
                 }}
             ],
-            "deck_name": "A short and relevant name for the deck",
-            "collection_name": "A short name and relavant for collection(deck of deck) case settings_collection_id == None
         }}
         """
         
@@ -164,7 +162,8 @@ class ChatService:
             amount=amount, 
             subject=subject,
             language_front=language_front,
-            language_back=language_back
+            language_back=language_back,
+            format=format
         )
         
         model = genai.GenerativeModel(Config.GENAI_MODEL)

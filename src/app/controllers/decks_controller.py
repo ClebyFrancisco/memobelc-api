@@ -22,8 +22,13 @@ class DecksController:
             image = data["image"]
         else:
             image = None
+        
+        if "cards" in data:
+            cards = data["cards"]
+        else:
+            cards = None
 
-        result = DeckService.create_deck(data["name"], data["collection_id"], image)
+        result = DeckService.create_deck(data["name"], data["collection_id"], image, cards)
         return jsonify(result), 200
 
     @staticmethod

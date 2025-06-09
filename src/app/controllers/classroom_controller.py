@@ -53,10 +53,7 @@ class ClassroomController:
             amount = data["amount"]
         else:
             amount = 20
-            
-        if "deck_id" not in data and "deck_name" not in data:
-            return jsonify({"error":"deck information is required"}), 400
-        
+
         if "language_front" not in data or "language_back" not in data:
             return jsonify({"error":"language of cards front and back is required"}), 400
             
@@ -70,11 +67,17 @@ class ClassroomController:
         else:
             deck_name = None
             
+        if "format" in data:
+            format = data["format"]
+        else:
+            format = None
+            
         response = ChatService.generate_cards_by_subject(subject=data.get("subject"), 
                                                          amount=amount, deck_id=deck_id, 
                                                          deck_name=deck_name, 
                                                          language_front=data.get("language_front"), 
-                                                         language_back=data.get("language_back"))
+                                                         language_back=data.get("language_back"),
+                                                         format=format)
         return jsonify(response), 200
 
         

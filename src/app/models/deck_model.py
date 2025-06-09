@@ -51,7 +51,7 @@ class DeckModel:
             CollectionModel.add_decks_to_collection(
                 self.collection_id, [str(result.inserted_id)]
             )
-        return True
+        return str(result.inserted_id)
 
     @staticmethod
     def get_all_decks():
