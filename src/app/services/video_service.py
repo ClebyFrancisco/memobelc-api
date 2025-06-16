@@ -15,8 +15,8 @@ class VideoService:
         return video.to_dict()
     
     @staticmethod
-    def get_all_videos():
-        return VideoModel.get_all_videos()
+    def get_all_videos(language):
+        return VideoModel.get_all_videos(language)
     
     
     

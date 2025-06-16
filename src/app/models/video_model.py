@@ -6,7 +6,7 @@ from src.app import mongo
 
 class VideoModel:
 
-    def __init__(self, _id=None, title=None, created_at=None, updated_at=None, thumbnail=None, deck_id=None, video_id=None):
+    def __init__(self, _id=None, title=None, created_at=None, updated_at=None, thumbnail=None, deck_id=None, video_id=None, **kwargs):
         self._id = str(_id) if _id else None
         self.title = title
         self.thumbnail = thumbnail
@@ -35,9 +35,14 @@ class VideoModel:
         
         
     @staticmethod
-    def get_all_videos():
+    def get_all_videos(language=None):
         """Retorna todos os videos como uma lista de dicionários"""
-        videos = mongo.db.videos.find()
+        
+        query = {}
+        if language:
+            query["language"] = language
+        
+        videos = mongo.db.videos.find(query)
         return [VideoModel(**video).to_dict() for video in videos]
 
         

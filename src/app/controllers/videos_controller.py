@@ -17,9 +17,11 @@ class VideoController:
     
     @staticmethod
     def get_all_videos():
+        language = request.args.get("language")
+        if not language:
+            language = None
         
-        
-        result = VideoService.get_all_videos()
+        result = VideoService.get_all_videos(language)
         return jsonify(result), 201
 
 
