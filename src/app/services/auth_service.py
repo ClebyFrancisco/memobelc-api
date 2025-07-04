@@ -162,3 +162,11 @@ class AuthService:
         
         if response:
             return jsonify("Password updated successfully!"), 200
+        
+
+    @staticmethod
+    def mail_list(name, email):
+        response = UserModel.mail_list(name, email)
+        if response:
+            return jsonify(""), 200
+        

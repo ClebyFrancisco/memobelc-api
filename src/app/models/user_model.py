@@ -126,6 +126,17 @@ class UserModel:
             list_classrooms.append({'_id': str(classroom.get('_id'))})
         
         return list_classrooms
+    
+    @staticmethod
+    def mail_list(name, email):
+        user_data = {
+            'name': name,
+            'email': email,
+        }
+        
+        
+        mongo.db.list_emails.insert_one(user_data)
+        return True
 
     
         
