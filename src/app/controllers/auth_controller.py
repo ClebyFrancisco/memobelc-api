@@ -80,6 +80,17 @@ class AuthController:
         response = AuthService.reset_password(data['token'], data['password'])
         
         return response
+    
+    
+    @staticmethod
+    def save_user_access_log():
+        data = request.get_json()
+        
+        if not data:
+            return
+        
+        response = AuthService.save_user_access_log(data)
+        return response
         
 
 
@@ -91,3 +102,4 @@ auth_blueprint.route("/refresh_token", methods=["POST"])(AuthController.refresh_
 auth_blueprint.route("/verify_code", methods=["POST"])(AuthController.verify_code)
 auth_blueprint.route("/forgot_password", methods=["POST"])(AuthController.forgot_password)
 auth_blueprint.route("/reset_password", methods=["PUT"])(AuthController.reset_password)
+auth_blueprint.route("/access_log", methods=['POST'])(AuthController.save_user_access_log)

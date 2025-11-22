@@ -3,6 +3,7 @@ from src.app.provider.stripe import Stripe
 import random
 from bson import ObjectId
 import string
+from datetime import datetime
 
 class UserModel:
     def __init__(self, _id=None, name = None, email=None, password=None, collections=None, customer_id=None, role='user', **kwargs):
@@ -126,9 +127,28 @@ class UserModel:
             list_classrooms.append({'_id': str(classroom.get('_id'))})
         
         return list_classrooms
-
     
+    
+    @staticmethod
+    def save_user_access_log(data):
         
+        user_acess_log = {
+            'user_id': ObjectId(data["user_id"]),
+            "deviceName": data["deviceName"],
+            "deviceType": data["deviceType"],
+            "expoPushToken": data["expoPushToken"],
+            "isPhysicalDevice": data["isPhysicalDevice"],
+            "manufacturer": data["manufacturer"],
+            "osName": data["osName"],
+            "osVersion": data["osVersion"],
+            "platformApiLevel": data["platformApiLevel"],
+            "created_at": datetime.utcnow()
+        
+        }
+        mongo.db.user_access_log.insert_one(user_acess_log)
+        return True
+
+
 
     def to_dict(self):
         """Converte o objeto UserModel para dicionário"""

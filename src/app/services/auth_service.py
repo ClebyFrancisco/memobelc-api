@@ -162,3 +162,9 @@ class AuthService:
         
         if response:
             return jsonify("Password updated successfully!"), 200
+        
+        
+    @staticmethod
+    def save_user_access_log(data):
+        response = UserModel.save_user_access_log(data)
+        return response
