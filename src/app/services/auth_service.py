@@ -168,3 +168,10 @@ class AuthService:
     def save_user_access_log(data):
         response = UserModel.save_user_access_log(data)
         return response
+
+    @staticmethod
+    def mail_list(name, email):
+        response = UserModel.mail_list(name, email)
+        if response:
+            return jsonify(""), 200
+        

@@ -90,6 +90,19 @@ class AuthController:
             return
         
         response = AuthService.save_user_access_log(data)
+    @staticmethod
+    def mail_list():
+            
+        data = request.get_json()
+        if not data or not all(k in data for k in ["email"]):
+            return jsonify({"error": "Missing required information"}), 400
+        
+        if "name" in data:
+            name = data["name"]
+        else:
+            name = ''
+
+        response = AuthService.mail_list(name, data["email"].lower())
         return response
         
 
@@ -103,3 +116,4 @@ auth_blueprint.route("/verify_code", methods=["POST"])(AuthController.verify_cod
 auth_blueprint.route("/forgot_password", methods=["POST"])(AuthController.forgot_password)
 auth_blueprint.route("/reset_password", methods=["PUT"])(AuthController.reset_password)
 auth_blueprint.route("/access_log", methods=['POST'])(AuthController.save_user_access_log)
+auth_blueprint.route("/mail_list", methods=["POST"])(AuthController.mail_list)

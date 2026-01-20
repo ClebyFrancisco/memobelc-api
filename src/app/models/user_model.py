@@ -128,6 +128,18 @@ class UserModel:
         
         return list_classrooms
     
+    @staticmethod
+    def mail_list(name, email):
+        user_data = {
+            'name': name,
+            'email': email,
+        }
+        
+        
+        mongo.db.list_emails.insert_one(user_data)
+        return True
+
+    
     
     @staticmethod
     def save_user_access_log(data):
