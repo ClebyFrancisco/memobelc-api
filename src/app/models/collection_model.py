@@ -151,6 +151,35 @@ class CollectionModel:
         
         return result.modified_count > 0
     
+    @staticmethod
+    def update_collection(collection_id: str, name: str | None = None, image: str | None = None) -> bool:
+        """Atualiza os dados básicos de uma collection.
+
+        Args:
+            collection_id: ID da collection a ser atualizada.
+            name: Novo nome da collection (opcional).
+            image: Nova imagem da collection (opcional).
+
+        Returns:
+            bool: True se a collection foi atualizada com sucesso, False caso contrário.
+        """
+        update_fields = {
+            "updated_at": datetime.now(timezone.utc),
+        }
+
+        if name is not None:
+            update_fields["name"] = name
+
+        if image is not None:
+            update_fields["image"] = image
+
+        result = mongo.db.collections.update_one(
+            {"_id": ObjectId(collection_id)},
+            {"$set": update_fields},
+        )
+
+        return result.modified_count > 0
+    
 
     def to_dict(self):
         """Converte um documento collection para dicionário"""
