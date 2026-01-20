@@ -33,3 +33,8 @@ class PushNotificationModel:
                 {"_id": existing["_id"]},
                 {"$set": {"updated_at": datetime.utcnow()}}
             )
+
+    @staticmethod
+    def remove_tokens_by_user(user_id):
+        """Remove todos os tokens de push associados a um usuário (logout global)."""
+        mongo.db.push_notification.delete_many({"user_id": str(user_id)})

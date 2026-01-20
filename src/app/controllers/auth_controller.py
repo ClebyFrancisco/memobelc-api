@@ -104,6 +104,13 @@ class AuthController:
 
         response = AuthService.mail_list(name, data["email"].lower())
         return response
+
+    @staticmethod
+    @token_required
+    def logout(current_user, token):
+        """Logout lógico da API: remove tokens de push do usuário para não receber notificações."""
+        AuthService.logout_user(str(current_user._id))
+        return jsonify({"message": "Logged out successfully"}), 200
         
 
 
@@ -117,3 +124,4 @@ auth_blueprint.route("/forgot_password", methods=["POST"])(AuthController.forgot
 auth_blueprint.route("/reset_password", methods=["PUT"])(AuthController.reset_password)
 auth_blueprint.route("/access_log", methods=['POST'])(AuthController.save_user_access_log)
 auth_blueprint.route("/mail_list", methods=["POST"])(AuthController.mail_list)
+auth_blueprint.route("/logout", methods=["POST"])(AuthController.logout)

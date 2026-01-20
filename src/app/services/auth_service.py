@@ -8,6 +8,7 @@ from werkzeug.exceptions import BadRequest, Unauthorized
 from src.app import mail
 from src.app.models.user_model import UserModel
 from src.app.models.classroom_model import ClassroomModel
+from src.app.models.push_notification_model import PushNotificationModel
 from src.app.config import Config
 
 
@@ -174,4 +175,9 @@ class AuthService:
         response = UserModel.mail_list(name, email)
         if response:
             return jsonify(""), 200
-        
+
+    @staticmethod
+    def logout_user(user_id: str):
+        """Remove tokens de push do usuário ao fazer logout para não receber mais notificações no dispositivo."""
+        PushNotificationModel.remove_tokens_by_user(user_id)
+        return True
