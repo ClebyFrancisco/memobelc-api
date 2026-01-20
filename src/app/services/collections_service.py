@@ -33,17 +33,22 @@ class CollectionService:
     @staticmethod
     def add_decks_to_collection(collection_id, deck_ids):
         return CollectionModel.add_decks_to_collection(collection_id, deck_ids)
+    
+    @staticmethod
+    def update_collection(collection_id, name=None, image=None):
+        """Atualiza os dados de uma collection"""
+        return CollectionModel.update_collection(collection_id, name=name, image=image)
 
     @staticmethod
     def delete_collection(collection_id):
         """Deleta uma collection e todos os recursos dependentes.
         
         A lógica de deleção em cascata:
+        0. Se a collection estiver vinculada a uma classroom, não deve ser apagada
         1. Deleta decks que pertencem APENAS a esta collection
         2. Para cada deck deletado, deleta cards que pertencem APENAS aquele deck
         3. Deleta user_progress relacionados aos cards/decks deletados
-        4. Deleta classroom se tiver essa collection
-        5. Deleta a collection
+        4. Deleta a collection
         
         Args:
             collection_id: ID da collection a ser deletada
@@ -54,6 +59,11 @@ class CollectionService:
         # Buscar a collection
         collection = CollectionModel.get_by_id(collection_id)
         if not collection:
+            return False
+
+        # 0. Se a collection estiver sendo usada em uma classroom, não apagar
+        # (collection é "uma classroom" quando possui o campo classroom preenchido)
+        if collection.get("classroom"):
             return False
         
         collection_obj_id = ObjectId(collection_id)
@@ -94,7 +104,6 @@ class CollectionService:
                     cards_to_delete.append((str(deck_id), card_obj_id))
         
         # 3. Deletar user_progress dos cards que serão deletados
-        from src.app.models.user_progress_model import UserProgressModel
         for deck_id_str, card_obj_id in cards_to_delete:
             mongo.db.user_progress.delete_many({
                 "deck_id": ObjectId(deck_id_str),
@@ -108,13 +117,12 @@ class CollectionService:
         # 5. Deletar os decks marcados
         for deck_id in decks_to_delete:
             mongo.db.decks.delete_one({"_id": deck_id})
-        
-        # 6. Deletar classroom se tiver essa collection
-        if collection.get("classroom"):
-            classroom_id = collection.get("classroom")
-            if isinstance(classroom_id, str):
-                classroom_id = ObjectId(classroom_id)
-            mongo.db.classrooms.delete_one({"_id": classroom_id})
+
+        # 6. Remover a collection da lista de collections de todos os usuários
+        mongo.db.users.update_many(
+            {"collections": collection_obj_id},
+            {"$pull": {"collections": collection_obj_id}}
+        )
         
         # 7. Deletar a collection
         result = mongo.db.collections.delete_one({"_id": collection_obj_id})

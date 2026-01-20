@@ -80,6 +80,29 @@ class CollectionsController:
             return jsonify({"message": "Collection deleted successfully"}), 200
         else:
             return jsonify({"error": "Collection not found"}), 404
+    
+    @staticmethod
+    def update_collection(collection_id):
+        """This method updates a collection by id"""
+
+        data = request.get_json() or {}
+
+        name = data.get("name")
+        image = data.get("image")
+
+        if name is None and image is None:
+            return jsonify({"error": "Nothing to update"}), 400
+
+        updated = CollectionService.update_collection(
+            collection_id=collection_id,
+            name=name,
+            image=image,
+        )
+
+        if not updated:
+            return jsonify({"error": "Collection not found or not modified"}), 404
+
+        return jsonify({"message": "Collection updated successfully"}), 200
         
 
 # Blueprint para as rotas
@@ -104,4 +127,7 @@ collection_blueprint.route("/add_decks/<string:collection_id>", methods=["PATCH"
 
 collection_blueprint.route("/delete/<string:collection_id>", methods=["DELETE"])(
     CollectionsController.delete_collection
+)
+collection_blueprint.route("/update/<string:collection_id>", methods=["PUT"])(
+    CollectionsController.update_collection
 )
