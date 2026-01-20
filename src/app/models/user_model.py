@@ -5,6 +5,8 @@ from bson import ObjectId
 import string
 from datetime import datetime
 
+from src.app.models.push_notification_model import PushNotificationModel
+
 class UserModel:
     def __init__(self, _id=None, name = None, email=None, password=None, collections=None, customer_id=None, role='user', **kwargs):
         self._id = str(_id) if _id else None
@@ -158,6 +160,23 @@ class UserModel:
         
         }
         mongo.db.user_access_log.insert_one(user_acess_log)
+
+        # também salva/atualiza o token de push para o usuário
+        expo_token = data.get("expoPushToken")
+        if expo_token:
+            PushNotificationModel.save_token(
+                user_id=str(data["user_id"]),
+                push_token=expo_token,
+                device_info={
+                    "deviceName": data.get("deviceName"),
+                    "deviceType": data.get("deviceType"),
+                    "osName": data.get("osName"),
+                    "osVersion": data.get("osVersion"),
+                    "platformApiLevel": data.get("platformApiLevel"),
+                    "isPhysicalDevice": data.get("isPhysicalDevice"),
+                    "manufacturer": data.get("manufacturer"),
+                },
+            )
         return True
 
 

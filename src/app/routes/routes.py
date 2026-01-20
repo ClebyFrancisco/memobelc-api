@@ -8,6 +8,7 @@ from src.app.controllers.videos_controller import video_blueprint
 from src.app.controllers.chat_controller import chat_blueprint
 from src.app.controllers.payment_controller import payment_blueprint
 from src.app.controllers.classroom_controller import classroom_blueprint
+from src.app.controllers.notification_controller import notification_blueprint
 
 
 routes = Blueprint("main", __name__)
@@ -22,3 +23,4 @@ routes.register_blueprint(user_progress_blueprint, url_prefix="/progress")
 routes.register_blueprint(chat_blueprint, url_prefix="/chat")
 routes.register_blueprint(payment_blueprint, url_prefix="/payment")
 routes.register_blueprint(classroom_blueprint, url_prefix="/classroom")
+routes.register_blueprint(notification_blueprint, url_prefix="/notifications")

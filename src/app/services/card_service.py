@@ -1,6 +1,8 @@
 from src.app.models.card_model import CardModel
 from datetime import datetime, timezone
 
+from src.app.services.notification_service import NotificationService
+
 
 class CardService:
     @staticmethod
@@ -15,7 +17,13 @@ class CardService:
             media_type=media_type,
         )
         card.save_to_db()
-        return card.to_dict()
+        card_dict = card.to_dict()
+
+        # notifica alunos de classrooms vinculadas a este deck
+        if deck_id:
+            NotificationService.notify_students_new_cards(deck_id=str(deck_id), amount=1)
+
+        return card_dict
 
     @staticmethod
     def get_card_by_id(card_id):
@@ -25,7 +33,12 @@ class CardService:
     
     @staticmethod
     def create_card_in_lots(name, image, cards):
-        result = CardModel.create_card_in_lots(name, image, cards)
+        deck_id = CardModel.create_card_in_lots(name, image, cards)
+
+        # notifica alunos que há novas cartas neste deck
+        if deck_id and isinstance(deck_id, str):
+            NotificationService.notify_students_new_cards(deck_id=deck_id, amount=len(cards))
+
         return "ok"
     
     @staticmethod

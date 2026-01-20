@@ -1,6 +1,7 @@
 from src.app.models.classroom_model import ClassroomModel
 from src.app.models.collection_model import CollectionModel
 from src.app.models.user_model import UserModel
+from src.app.services.notification_service import NotificationService
 
 class ClassroomService:
     
@@ -24,6 +25,10 @@ class ClassroomService:
         
         if user:
             ClassroomModel.add_students(classroom_id, user._id)
+            # notifica o usuário que foi adicionado à classroom
+            NotificationService.notify_user_added_to_classroom(
+                classroom_id=classroom_id, user_id=str(user._id)
+            )
             
         else:
             ClassroomModel.add_guest(classroom_id, email_user)

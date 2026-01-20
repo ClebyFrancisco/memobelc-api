@@ -63,8 +63,10 @@ class CollectionModel:
     def get_collections_by_user(user_id):
         """"Busca todos os master decks do user e retorna a quantidade de cartas totais e pendentes."""
         user = UserModel.find_by_id(user_id)
-        
-        
+        if not user:
+            # Usuário não encontrado: retorna lista vazia em vez de quebrar com 500
+            return {"collections": []}
+
         user = user.to_dict()
 
         collections_list = []
@@ -72,6 +74,9 @@ class CollectionModel:
     
         for collection_id in user.get("collections", []):
             collection = CollectionModel.get_by_id(collection_id)
+            # Se a collection não existir mais, ignora para evitar erro 500
+            if not collection:
+                continue
 
             total_cards_in_collection = 0
             pending_cards_in_collection = 0
@@ -86,6 +91,9 @@ class CollectionModel:
             
             for deck_id in collection.get("decks", []):
                 deck = DeckModel.get_by_id(deck_id)
+                # Se o deck não existir mais, ignora
+                if not deck:
+                    continue
 
 
 
