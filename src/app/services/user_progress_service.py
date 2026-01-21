@@ -1,5 +1,6 @@
 from datetime import datetime
 from src.app.models.user_progress_model import UserProgressModel
+from src.app.services.user_streak_service import UserStreakService
 
 
 class UserProgressService:
@@ -16,8 +17,11 @@ class UserProgressService:
 
     @staticmethod
     def update_card_status(user_id, card_id, recall_level):
-        """Atualiza o status de uma carta específica no progresso do usuário."""
+        """Atualiza o status de uma carta específica no progresso do usuário.
+        Também registra o dia de estudo para o streak."""
         progress = UserProgressModel.update_status(user_id, card_id, recall_level)
+        # Registra que o usuário estudou hoje (para streak)
+        UserStreakService.record_study(user_id)
         return progress
 
     @staticmethod
