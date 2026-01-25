@@ -98,6 +98,42 @@ class UserModel:
         code = ''.join(random.choices(string.digits, k=6))
         mongo.db.users.update_one({'email': email}, {'$set': {'code':code}})
         return code
+    
+    @staticmethod
+    def generate_reset_code(email):
+        """Gera um código de 6 dígitos para recuperação de senha e salva com expiração de 15 minutos."""
+        from datetime import timedelta, timezone
+        code = ''.join(random.choices(string.digits, k=6))
+        expiry = datetime.now(timezone.utc) + timedelta(minutes=15)
+        mongo.db.users.update_one(
+            {'email': email}, 
+            {'$set': {
+                'reset_code': code,
+                'reset_code_expiry': expiry
+            }}
+        )
+        return code
+    
+    @staticmethod
+    def get_reset_code_data(email):
+        """Retorna os dados do código de reset (código e expiração) para um email."""
+        user_data = mongo.db.users.find_one({'email': email.lower()})
+        if not user_data:
+            return None
+        
+        return {
+            'reset_code': user_data.get('reset_code'),
+            'reset_code_expiry': user_data.get('reset_code_expiry')
+        }
+    
+    @staticmethod
+    def remove_reset_code(email):
+        """Remove o código de reset e sua expiração após uso bem-sucedido."""
+        result = mongo.db.users.update_one(
+            {'email': email.lower()},
+            {'$unset': {'reset_code': '', 'reset_code_expiry': ''}}
+        )
+        return result.modified_count > 0
         
         
     @staticmethod
@@ -145,17 +181,21 @@ class UserModel:
     
     @staticmethod
     def save_user_access_log(data):
+        # user_id é obrigatório, os demais campos podem ser None
+        user_id = data.get("user_id")
+        if not user_id:
+            return False
         
         user_acess_log = {
-            'user_id': ObjectId(data["user_id"]),
-            "deviceName": data["deviceName"],
-            "deviceType": data["deviceType"],
-            "expoPushToken": data["expoPushToken"],
-            "isPhysicalDevice": data["isPhysicalDevice"],
-            "manufacturer": data["manufacturer"],
-            "osName": data["osName"],
-            "osVersion": data["osVersion"],
-            "platformApiLevel": data["platformApiLevel"],
+            'user_id': ObjectId(user_id),
+            "deviceName": data.get("deviceName"),
+            "deviceType": data.get("deviceType"),
+            "expoPushToken": data.get("expoPushToken"),
+            "isPhysicalDevice": data.get("isPhysicalDevice"),
+            "manufacturer": data.get("manufacturer"),
+            "osName": data.get("osName"),
+            "osVersion": data.get("osVersion"),
+            "platformApiLevel": data.get("platformApiLevel"),
             "created_at": datetime.utcnow()
         
         }
@@ -165,7 +205,7 @@ class UserModel:
         expo_token = data.get("expoPushToken")
         if expo_token:
             PushNotificationModel.save_token(
-                user_id=str(data["user_id"]),
+                user_id=str(user_id),
                 push_token=expo_token,
                 device_info={
                     "deviceName": data.get("deviceName"),

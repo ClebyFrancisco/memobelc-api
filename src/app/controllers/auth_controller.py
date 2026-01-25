@@ -1,5 +1,4 @@
-from flask import Blueprint, jsonify, request, Response, current_app, abort
-from werkzeug.exceptions import BadRequest, Unauthorized
+from flask import Blueprint, jsonify, request, current_app
 from src.app.services.auth_service import AuthService
 from src.app.middlewares.token_required import token_required
 
@@ -22,13 +21,15 @@ class AuthController:
         """Authenticates a user and returns an access token."""
         data = request.get_json()
         if not data or "email" not in data or "password" not in data:
-            raise BadRequest(description="Email and password are required")
+            return jsonify({"error": "Email and password are required"}), 400
 
-        token = AuthService.authenticate_user(data["email"].lower(), data["password"])
-        if token:
-            return jsonify(token), 200
-
-        raise Unauthorized(description="Invalid credentials")
+        try:
+            result = AuthService.authenticate_user(data["email"].lower(), data["password"])
+            if result:
+                return jsonify(result), 200
+            return jsonify({"error": "Invalid credentials"}), 401
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
 
     @staticmethod
     def refresh_token():
@@ -64,22 +65,55 @@ class AuthController:
         if "email" not in data:
             return jsonify({"error": "Email is required"}), 400
 
-        response = AuthService.forgot_password(data["email"])
-        if response:
+        try:
+            response = AuthService.forgot_password(data["email"])
+            if response:
+                return jsonify(response), 200
+            # Por segurança, não revela se o email existe ou não
+            return jsonify({"message": "Se o email existir, um código de recuperação foi enviado."}), 200
+        except Exception as e:
+            current_app.logger.error(f"Erro no forgot_password: {str(e)}")
+            # Por segurança, retorna sucesso mesmo em caso de erro
+            return jsonify({"message": "Se o email existir, um código de recuperação foi enviado."}), 200
+    
+    @staticmethod
+    def verify_reset_code():
+        """Verifica se o código de recuperação é válido."""
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "Dados não fornecidos"}), 400
+        
+        if 'code' not in data:
+            return jsonify({"error": "Código é obrigatório"}), 400
+        
+        if 'email' not in data:
+            return jsonify({"error": "Email é obrigatório"}), 400
+        
+        try:
+            email = data['email'].lower().strip() if isinstance(data['email'], str) else str(data['email']).lower().strip()
+            code = str(data['code']).strip()
             
-            return jsonify(response), 200
-        return jsonify(), 400
+            is_valid = AuthService.verify_reset_code(email, code)
+            if is_valid:
+                return jsonify({"message": "Código válido", "valid": True}), 200
+            return jsonify({"error": "Código inválido ou expirado", "valid": False}), 400
+        except Exception as e:
+            current_app.logger.error(f"Erro ao verificar código de reset: {str(e)}")
+            return jsonify({"error": f"Erro ao verificar código: {str(e)}", "valid": False}), 400
     
     @staticmethod
     def reset_password():
         data = request.get_json()
         
-        if not data or "password" not in data or 'token' not in data:
-            raise BadRequest(description="Email and password are required")
+        if not data or "password" not in data or 'code' not in data or 'email' not in data:
+            return jsonify({"error": "Email, code and password are required"}), 400
         
-        response = AuthService.reset_password(data['token'], data['password'])
-        
-        return response
+        try:
+            response = AuthService.reset_password(data['email'], data['code'], data['password'])
+            return response
+        except Exception as e:
+            return jsonify({"error": str(e)}), 400
     
     
     @staticmethod
@@ -87,9 +121,15 @@ class AuthController:
         data = request.get_json()
         
         if not data:
-            return
+            return jsonify({"error": "No data provided"}), 400
         
-        response = AuthService.save_user_access_log(data)
+        try:
+            response = AuthService.save_user_access_log(data)
+            if response:
+                return jsonify({"message": "Access log saved successfully"}), 200
+            return jsonify({"error": "User ID is required"}), 400
+        except Exception as e:
+            return jsonify({"error": str(e)}), 400
     @staticmethod
     def mail_list():
             
@@ -121,6 +161,7 @@ auth_blueprint.route("/login", methods=["POST"])(AuthController.login)
 auth_blueprint.route("/refresh_token", methods=["POST"])(AuthController.refresh_token)
 auth_blueprint.route("/verify_code", methods=["POST"])(AuthController.verify_code)
 auth_blueprint.route("/forgot_password", methods=["POST"])(AuthController.forgot_password)
+auth_blueprint.route("/verify_reset_code", methods=["POST"])(AuthController.verify_reset_code)
 auth_blueprint.route("/reset_password", methods=["PUT"])(AuthController.reset_password)
 auth_blueprint.route("/access_log", methods=['POST'])(AuthController.save_user_access_log)
 auth_blueprint.route("/mail_list", methods=["POST"])(AuthController.mail_list)
