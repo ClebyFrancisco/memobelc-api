@@ -53,7 +53,7 @@ class AuthService:
 
             token = jwt.encode(
                 {
-                    "_id": user._id,
+                    "_id": str(user._id),
                     "email": user.email,
                     "exp": datetime.now(timezone.utc) + expiration,
                 },
@@ -61,7 +61,16 @@ class AuthService:
                 algorithm="HS256",
             )
 
-            return {"token": token, "name": user.name, "email": user.email, "user_id": user._id, "role":user.role} if is_confirmed else {"pending": ["User not confirmed!", token]}
+            if is_confirmed:
+                return {
+                    "token": str(token) if not isinstance(token, str) else token,
+                    "name": user.name,
+                    "email": user.email,
+                    "user_id": str(user._id),
+                    "role": getattr(user, 'role', 'user') or 'user'
+                }
+            else:
+                return {"pending": ["User not confirmed!", str(token) if not isinstance(token, str) else token]}
 
         return None
 
@@ -90,14 +99,20 @@ class AuthService:
             if user:
                 token = jwt.encode(
                     {
-                        "_id": user._id,
+                        "_id": str(user._id),
                         "email": user.email,
                         "exp": datetime.now(timezone.utc) + timedelta(hours=72),
                     },
                     current_app.config["SECRET_KEY"],
                     algorithm="HS256",
                 )
-                return {"token": token, "name": user.name, "email": user.email, "user_id": user._id, "role":user.role}
+                return {
+                    "token": token,
+                    "name": user.name,
+                    "email": user.email,
+                    "user_id": str(user._id),
+                    "role": getattr(user, 'role', 'user') or 'user'
+                }
 
         except jwt.ExpiredSignatureError:
             return None
@@ -114,55 +129,110 @@ class AuthService:
 
     @staticmethod
     def forgot_password(email):
-        """Handles password recovery by sending a secure password reset link."""
-        user = UserModel.find_by_email(email)
+        """Handles password recovery by sending a verification code via email."""
+        user = UserModel.find_by_email(email.lower())
         if not user:
             return None
 
+        # Gera um código de 6 dígitos e salva no banco
+        reset_code = UserModel.generate_reset_code(email.lower())
         
-        encoded_id = urlsafe_b64encode(str(user._id).encode()).decode()
-
-        
-        reset_token = jwt.encode(
-            {
-                "reset_password": True,
-                "user_id": encoded_id,
-                "exp": datetime.now(timezone.utc) + timedelta(minutes=15),
-            },
-            current_app.config["SECRET_KEY"],
-            algorithm="HS256",
-        )
-
-        
-        base_frontend_url = Config.FRONT_BASE_URL
-        reset_link = f"{base_frontend_url}/reset_password?token={reset_token}"
-
-        msg = Message("Recuperação de senha", recipients=[email])
-        msg.body = f"Olá!\n\nClique no link abaixo para redefinir sua senha. Esse link é válido por 15 minutos:\n\n{reset_link}\n\nSe você não solicitou isso, ignore este e-mail."
-        mail.send(msg)
-        
-
-        return {"message": "E-mail de recuperação enviado com sucesso."}
+        try:
+            msg = Message("Recuperação de senha", recipients=[email.lower()])
+            msg.body = f"Olá!\n\nSeu código de recuperação de senha é: {reset_code}\n\nEste código é válido por 15 minutos.\n\nSe você não solicitou isso, ignore este e-mail."
+            mail.send(msg)
+            
+            return {"message": "Código de recuperação enviado com sucesso para seu e-mail."}
+        except Exception as e:
+            # Log do erro para debug, mas não expõe detalhes ao usuário
+            current_app.logger.error(f"Erro ao enviar email de recuperação de senha: {str(e)}")
+            # Retorna sucesso mesmo se o email falhar (por segurança, não revela se o email existe)
+            # O código foi gerado e salvo, então o usuário pode tentar usar mesmo se o email não foi enviado
+            return {"message": "Código de recuperação gerado. Verifique seu e-mail."}
 
     @staticmethod
-    def reset_password(token, new_password):
-        payload = jwt.decode(token, current_app.config["SECRET_KEY"], algorithms=["HS256"])
-
-        if not payload.get("reset_password"):
-            return {"error": "Token inválido para redefinição de senha."}, 400
-
-           
-        if datetime.fromtimestamp(payload["exp"], timezone.utc) < datetime.now(timezone.utc):
-            return jsonify({"error": "Token expirado."}), 400
+    def verify_reset_code(email, code):
+        """Verifica se o código de recuperação é válido."""
+        try:
+            email_lower = email.lower().strip()
+            code_str = str(code).strip()
+            
+            user = UserModel.find_by_email(email_lower)
+            if not user:
+                current_app.logger.warning(f"Usuário não encontrado para email: {email_lower}")
+                return False
+            
+            # Busca os dados do código de reset através do model
+            reset_data = UserModel.get_reset_code_data(email_lower)
+            if not reset_data:
+                current_app.logger.warning(f"Dados do código de reset não encontrados para email: {email_lower}")
+                return False
+            
+            stored_code = reset_data.get('reset_code')
+            code_expiry = reset_data.get('reset_code_expiry')
+            
+            if not stored_code:
+                current_app.logger.warning(f"Código de reset não encontrado para email: {email_lower}")
+                return False
+            
+            if not code_expiry:
+                current_app.logger.warning(f"Expiração do código não encontrada para email: {email_lower}")
+                return False
+            
+            # Verifica se o código expirou
+            # Garante que ambas as datas tenham timezone para comparação
+            now = datetime.now(timezone.utc)
+            
+            # MongoDB pode retornar datetime como naive ou aware
+            if isinstance(code_expiry, datetime):
+                # Se code_expiry não tem timezone (naive), assume UTC
+                if code_expiry.tzinfo is None:
+                    code_expiry = code_expiry.replace(tzinfo=timezone.utc)
+                else:
+                    # Se já tem timezone, converte para UTC para comparação
+                    code_expiry = code_expiry.astimezone(timezone.utc)
+            else:
+                # Se não é datetime, tenta converter
+                current_app.logger.error(f"code_expiry não é datetime: {type(code_expiry)}")
+                return False
+            
+            if now > code_expiry:
+                current_app.logger.warning(f"Código expirado para email: {email_lower}. Agora: {now}, Expira: {code_expiry}")
+                return False
+            
+            # Converte ambos para string para comparação
+            stored_code_str = str(stored_code).strip()
+            
+            # Verifica se o código está correto
+            is_valid = stored_code_str == code_str
+            if not is_valid:
+                current_app.logger.warning(f"Código inválido. Esperado: {stored_code_str}, Recebido: {code_str}")
+            
+            return is_valid
+        except Exception as e:
+            current_app.logger.error(f"Erro ao verificar código de reset: {str(e)}")
+            return False
+    
+    @staticmethod
+    def reset_password(email, code, new_password):
+        """Redefine a senha usando email e código de verificação."""
+        # Verifica o código primeiro
+        if not AuthService.verify_reset_code(email, code):
+            return jsonify({"error": "Código inválido ou expirado."}), 400
         
-        decoded_id = urlsafe_b64decode(payload["user_id"].encode()).decode()
+        user = UserModel.find_by_email(email.lower())
+        if not user:
+            return jsonify({"error": "Usuário não encontrado."}), 404
+        
         hashed_password = generate_password_hash(new_password)
-        
-        
-        response = UserModel.update_password(decoded_id, hashed_password)
+        response = UserModel.update_password(str(user._id), hashed_password)
         
         if response:
-            return jsonify("Password updated successfully!"), 200
+            # Remove o código de reset após uso bem-sucedido através do model
+            UserModel.remove_reset_code(email.lower())
+            return jsonify({"message": "Senha atualizada com sucesso!"}), 200
+        
+        return jsonify({"error": "Erro ao atualizar a senha."}), 500
         
         
     @staticmethod
