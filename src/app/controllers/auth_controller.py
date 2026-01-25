@@ -13,7 +13,8 @@ class AuthController:
         if not data or not all(k in data for k in ["email", "password", "name"]):
             return jsonify({"error": "Missing required information"}), 400
 
-        token = AuthService.create_user(data["name"], data["email"].lower(), data["password"])
+        invite_code = data.get("invite_code")  # Opcional: código de convite
+        token = AuthService.create_user(data["name"], data["email"].lower(), data["password"], invite_code)
         return token
 
     @staticmethod
