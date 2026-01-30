@@ -44,19 +44,19 @@ class InviteService:
                     sender=Config.MAIL_USERNAME
                 )
                 msg.body = f"""
-Olá!
+                Olá!
 
-Você foi convidado por {inviter.name} para se juntar ao Memobelc!
+                Você foi convidado por {inviter.name} para se juntar ao Memobelc!
 
-Memobelc é uma plataforma incrível para aprender idiomas de forma divertida e eficiente.
+                Memobelc é uma plataforma incrível para aprender idiomas de forma divertida e eficiente.
 
-Para criar sua conta, acesse: {Config.FRONTEND_URL}/register?invite={invite_code}
+                Para criar sua conta, acesse: {Config.FRONT_BASE_URL}/register?invite={invite_code}
 
-Ou use este código de convite ao se registrar: {invite_code}
+                Ou use este código de convite ao se registrar: {invite_code}
 
-Esperamos você!
+                Esperamos você!
 
-Equipe Memobelc
+                Equipe Memobelc
                 """
                 mail.send(msg)
             except Exception as e:
@@ -81,7 +81,7 @@ Equipe Memobelc
         try:
             invite_id, invite_code = InviteModel.create_invite_by_link(inviter_id)
             
-            invite_link = f"{Config.FRONTEND_URL}/register?invite={invite_code}"
+            invite_link = f"{Config.FRONT_BASE_URL}/register?invite={invite_code}"
             
             return jsonify({
                 "message": "Link de convite gerado com sucesso",

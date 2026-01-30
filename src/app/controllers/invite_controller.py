@@ -1,6 +1,8 @@
+"""Module for handling user invite friends endpoints."""
+
 from flask import Blueprint, jsonify, request
-from src.app.services.invite_service import InviteService
 from src.app.middlewares.token_required import token_required
+from src.app.services.invite_service import InviteService
 
 
 class InviteController:
@@ -47,9 +49,9 @@ class InviteController:
 
 invite_blueprint = Blueprint("invite_blueprint", __name__)
 
-invite_blueprint.route("/invite/email", methods=["POST"])(InviteController.send_invite_by_email)
-invite_blueprint.route("/invite/link", methods=["POST"])(InviteController.generate_invite_link)
-invite_blueprint.route("/invite/list", methods=["GET"])(InviteController.get_user_invites)
-invite_blueprint.route("/invite/friends", methods=["GET"])(InviteController.get_user_invited_friends)
-invite_blueprint.route("/invite/verify", methods=["POST"])(InviteController.verify_invite_code)
+invite_blueprint.route("/email", methods=["POST"])(InviteController.send_invite_by_email)
+invite_blueprint.route("/link", methods=["POST"])(InviteController.generate_invite_link)
+invite_blueprint.route("/list", methods=["GET"])(InviteController.get_user_invites)
+invite_blueprint.route("/friends", methods=["GET"])(InviteController.get_user_invited_friends)
+invite_blueprint.route("/verify", methods=["POST"])(InviteController.verify_invite_code)
 
