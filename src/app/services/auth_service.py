@@ -16,7 +16,7 @@ class AuthService:
     """Handles user authentication, including registration, login, and token management."""
 
     @staticmethod
-    def create_user(name, email, password):
+    def create_user(name, email, password, invite_code=None):
         """Creates a new user and returns an authentication token."""
         if UserModel.find_by_email(email):
             return jsonify({"message": "User already exists!"}), 409
@@ -26,6 +26,19 @@ class AuthService:
 
         user = UserModel.find_by_email(email)
         if user:
+            # Se houver código de convite, processa o convite
+            if invite_code:
+                from src.app.models.invite_model import InviteModel
+                # Verifica se o convite é válido
+                invite = InviteModel.get_invite_by_code(invite_code)
+                if invite and invite['status'] == 'pending':
+                    # Aceita o convite
+                    InviteModel.accept_invite(invite_code, str(user._id), email)
+            
+            # Sempre verifica se há convite por email pendente
+            from src.app.models.invite_model import InviteModel
+            InviteModel.update_invite_status_by_email(email)
+            
             token = jwt.encode(
                 {
                     "_id": user._id,
