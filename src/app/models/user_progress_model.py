@@ -47,18 +47,27 @@ class UserProgressModel:
         }
         mongo.db.user_progress.insert_one(progress_data)
 
+    _RECALL_LEVEL_MAP = {0: "I don't remember", 1: "Difficult", 2: "Good", 3: "Easy"}
+
     @staticmethod
     def update_status(user_id, card_id, recall_level):
         """Atualiza o status da carta e recalcula a data de próxima revisão."""
-        
+        if isinstance(recall_level, int):
+            recall_level = UserProgressModel._RECALL_LEVEL_MAP.get(
+                recall_level, "Good"
+            )
+
         query = {
             "user_id": ObjectId(user_id),
             "card_id": ObjectId(card_id)
         }
-        
+
         card_progress = mongo.db.user_progress.find_one(query)
+        if not card_progress:
+            return None
+
         progress = UserProgressModel(**card_progress)
-        
+
         attempts = progress.attempts + 1
         last_reviewed = progress.last_reviewed = datetime.now(timezone.utc)
         next_review = progress.calculate_next_review(recall_level)

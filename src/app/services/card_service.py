@@ -59,6 +59,8 @@ class CardService:
         card = CardModel.get_by_id(card_id)
         if not card:
             return None
+        if isinstance(card, dict):
+            card = CardModel(**card)
 
         card.front = data.get("front", card.front)
         card.back = data.get("back", card.back)
@@ -72,7 +74,9 @@ class CardService:
     def delete_card(card_id):
         """Exclui um card pelo ID."""
         card = CardModel.get_by_id(card_id)
-        if card:
-            card.delete_from_db()
-            return True
-        return False
+        if not card:
+            return False
+        if isinstance(card, dict):
+            card = CardModel(**card)
+        card.delete_from_db()
+        return True

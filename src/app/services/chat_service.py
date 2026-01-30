@@ -86,8 +86,10 @@ class ChatService:
     @staticmethod   
     def generate_card(chat_id, settings):
         chat = ChatModel.get_by_id(chat_id=chat_id)
-        
-        settings_collection_id= settings.get("collection_id", None)
+        if not chat:
+            return None
+        settings = settings or {}
+        settings_collection_id = settings.get("collection_id", None)
         conversation_language = settings.get("language_conversation", "en")
 
         pre_prompt_template = """
