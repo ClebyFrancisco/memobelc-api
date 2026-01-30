@@ -1,6 +1,5 @@
 import random
 from bson import ObjectId
-from werkzeug.exceptions import BadRequest
 from datetime import datetime, timedelta, timezone
 from src.app import mongo
 from .collection_model import CollectionModel
@@ -57,7 +56,7 @@ class DeckModel:
     def get_all_decks():
         """Retorna todos os  decks como uma lista de dicionários"""
         decks = mongo.db.decks.find()
-        return [DeckModel.to_dict(deck) for deck in decks]
+        return [DeckModel(**d).to_dict() for d in decks]
 
     @staticmethod
     def add_cards_to_deck(deck_id, cards_ids):
@@ -87,7 +86,7 @@ class DeckModel:
             deck = DeckModel.get_by_id(deck_id)
 
             pending_count = UserProgressModel.count_pending_cards(
-                user_id, deck.get("id")
+                user_id, deck.get("_id") or deck.get("id")
             )
 
             deck.update(
@@ -103,8 +102,7 @@ class DeckModel:
 
             for card_id in deck.get("cards", []):
                 card = CardModel.get_by_id(card_id)
-
-                cards_list.append(card)
+                cards_list.append(card.to_dict() if card and hasattr(card, "to_dict") else card)
 
             deck.update(
                 {
@@ -135,10 +133,9 @@ class DeckModel:
     @staticmethod
     def check_if_the_user_has_the_deck(user_id, deck_id):
         user = UserModel.find_by_id(user_id)
-        user = user.to_dict()
-        
         if not user:
-            return BadRequest(description="error: user not found!")
+            return {"user_has_deck": "false", "error": "User not found"}
+        user = user.to_dict() if hasattr(user, "to_dict") else user
 
         for collection_id in user.get("collections", []):
             collection = CollectionModel.get_by_id(collection_id)

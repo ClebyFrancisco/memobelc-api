@@ -15,11 +15,14 @@ class PaymentController:
     @staticmethod
     def stripe_webhook():
         payload = request.data
-        sig_header = request.headers['STRIPE_SIGNATURE']
-        
-        response = Stripe.stripe_webhook(payload, sig_header)
-
-        return jsonify(response)
+        sig_header = request.headers.get("STRIPE_SIGNATURE", "")
+        try:
+            response = Stripe.stripe_webhook(payload, sig_header)
+            return jsonify(response), 200
+        except Exception as e:
+            if "SignatureVerification" in type(e).__name__ or "Signature" in type(e).__name__:
+                return jsonify({"error": "Invalid signature"}), 400
+            return jsonify({"error": str(e)}), 500
 
         
 payment_blueprint = Blueprint("payment_blueprint", __name__)

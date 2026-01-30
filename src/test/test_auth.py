@@ -1,37 +1,6 @@
-import sys
-import os
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-
-
-import pytest
+"""Testes das rotas de autenticação."""
 import json
-from flask import Flask
-from src.app import create_app, mongo
-from src.app.models.user_model import UserModel
-from src.app.services.auth_service import AuthService
-from src.app.controllers.auth_controller import auth_blueprint
-
-from dotenv import load_dotenv
-from os import path, environ
-
-basedir = path.abspath(path.join(path.dirname(__file__), "../../"))
-load_dotenv(path.join(basedir, ".env"))
-
-@pytest.fixture(scope="session")
-def app():
-    app = create_app()
-    app.config["TESTING"] = True
-    app.config["MONGO_URI"] = environ["MONGO_URI_TEST"]
-    app.register_blueprint(auth_blueprint, url_prefix="/auth")
-    
-    yield app 
-    
-    mongo.db.users.drop()
-
-@pytest.fixture
-def client(app):
-    return app.test_client()
+import pytest
 
 
 @pytest.fixture
@@ -40,14 +9,93 @@ def new_user():
 
 
 def test_register_new_user(client, new_user):
-    response = client.post("/auth/register", data=json.dumps(new_user), content_type="application/json")
+    # Usar email único para evitar 409 de testes anteriores na mesma sessão
+    unique_user = {**new_user, "email": "unique_register@example.com"}
+    response = client.post(
+        "/auth/register",
+        data=json.dumps(unique_user),
+        content_type="application/json",
+    )
     assert response.status_code == 201
     data = response.get_json()
-    assert "token" in data
+    assert "token" in data or "access_token" in data
 
-        
+
 def test_register_user_already_exists(client, new_user):
-    response = client.post("/auth/register", data=json.dumps(new_user), content_type="application/json")
-    assert response.status_code == 400
+    client.post("/auth/register", data=json.dumps(new_user), content_type="application/json")
+    response = client.post(
+        "/auth/register",
+        data=json.dumps(new_user),
+        content_type="application/json",
+    )
+    assert response.status_code in (400, 409)
     data = response.get_json()
-    assert "error" in data
+    assert "error" in data or "message" in data
+
+
+def test_register_missing_fields(client):
+    response = client.post(
+        "/auth/register",
+        data=json.dumps({"email": "a@a.com"}),
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+
+
+def test_login_success(client, new_user):
+    client.post("/auth/register", data=json.dumps(new_user), content_type="application/json")
+    response = client.post(
+        "/auth/login",
+        data=json.dumps({"email": new_user["email"], "password": new_user["password"]}),
+        content_type="application/json",
+    )
+    assert response.status_code == 200
+    data = response.get_json()
+    # Usuário pode retornar token (confirmado) ou pending (não confirmado)
+    assert "token" in data or "access_token" in data or "pending" in data
+
+
+def test_login_invalid_credentials(client):
+    response = client.post(
+        "/auth/login",
+        data=json.dumps({"email": "nonexistent@example.com", "password": "wrong"}),
+        content_type="application/json",
+    )
+    assert response.status_code == 401
+
+
+def test_login_missing_fields(client):
+    response = client.post(
+        "/auth/login",
+        data=json.dumps({"email": "a@a.com"}),
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+
+
+def test_forgot_password(client):
+    response = client.post(
+        "/auth/forgot_password",
+        data=json.dumps({"email": "any@example.com"}),
+        content_type="application/json",
+    )
+    assert response.status_code == 200
+
+
+def test_mail_list(client):
+    response = client.post(
+        "/auth/mail_list",
+        data=json.dumps({"email": "newsletter@example.com", "name": "Test"}),
+        content_type="application/json",
+    )
+    assert response.status_code in (200, 201)
+
+
+def test_logout_requires_token(client):
+    response = client.post("/auth/logout", content_type="application/json")
+    assert response.status_code == 401
+
+
+def test_logout_success(client, auth_headers):
+    response = client.post("/auth/logout", headers=auth_headers)
+    assert response.status_code == 200

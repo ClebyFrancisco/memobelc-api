@@ -43,7 +43,7 @@ class UserProgressController:
         user_id = data.get("user_id")
         cards = data.get("cards", [])
 
-        if not user_id or not isinstance(cards, list):
+        if not user_id or not isinstance(cards, list) or not cards:
             return jsonify({"error": "Missing or invalid required information"}), 400
 
         updated_progress = []
@@ -51,12 +51,12 @@ class UserProgressController:
             card_id = card.get("card_id")
             recall_level = card.get("recall_level")
             
-            if card_id and recall_level:
+            if card_id and recall_level is not None:
                 progress = UserProgressService.update_card_status(
                     user_id, card_id, recall_level
                 )
-                updated_progress.append(progress)
-        
+                if progress is not None:
+                    updated_progress.append(progress)
         return jsonify({"updated_progress": updated_progress}), 200
 
 

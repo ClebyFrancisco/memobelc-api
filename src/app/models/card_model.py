@@ -82,18 +82,18 @@ class CardModel:
 
         if self._id:
             mongo.db.cards.update_one({"_id": ObjectId(self._id)}, {"$set": card_data})
-        else:
-            result = mongo.db.cards.insert_one(card_data)
-            self._id = str(result.inserted_id)
-            
+            return str(self._id)
+        result = mongo.db.cards.insert_one(card_data)
+        self._id = str(result.inserted_id)
+
         if self.deck:
             DeckModel.add_cards_to_deck(
                 self.deck, [str(result.inserted_id)]
             )
-            
+
         for i in users:
             UserProgressModel.create_or_update(i, self.deck, self._id)
-  
+
         return str(result.inserted_id)
                 
                 
@@ -134,24 +134,23 @@ class CardModel:
 
     @staticmethod
     def get_by_id(card_id):
-        """Busca um card pelo ID e retorna como dicionário"""
+        """Busca um card pelo ID e retorna instância CardModel ou None."""
         card = mongo.db.cards.find_one({"_id": ObjectId(card_id)})
         if card:
-            result = CardModel(**card)
-            return result.to_dict()
+            return CardModel(**card)
         return None
     
     @staticmethod
     def get_cards_by_deck(deck_id):
         deck = DeckModel.get_by_id(deck_id)
-        
+        if not deck:
+            return {"cards": []}
         list_cards = []
-        
         for card_id in deck.get("cards", []):
-            card = mongo.db.cards.find_one({"_id": ObjectId(card_id)})
-            
-            card = CardModel(**card)
-            
+            card_doc = mongo.db.cards.find_one({"_id": ObjectId(card_id)})
+            if not card_doc:
+                continue
+            card = CardModel(**card_doc)
             list_cards.append(card.to_dict())
             
         return {'cards':list_cards}

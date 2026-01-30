@@ -1,32 +1,954 @@
 {
-    "swagger":"2.0",
-    "info": {
-        "version": "1.0.0",
-        "title": "API MemoBelc"
+  "swagger": "2.0",
+  "info": {
+    "version": "1.0.0",
+    "title": "API MemoBelc",
+    "description": "Documentação da API MemoBelc. Use **Authorize** para informar o token Bearer e testar rotas protegidas."
+  },
+  "host": "127.0.0.1:5000",
+  "basePath": "/",
+  "schemes": ["http"],
+  "consumes": ["application/json"],
+  "produces": ["application/json"],
+  "securityDefinitions": {
+    "Bearer": {
+      "type": "apiKey",
+      "name": "Authorization",
+      "in": "header",
+      "description": "Token JWT: use o valor 'Bearer <seu_token>'"
+    }
+  },
+  "security": [],
+  "tags": [
+    { "name": "Auth", "description": "Autenticação e usuário" },
+    { "name": "Collections", "description": "Coleções" },
+    { "name": "Decks", "description": "Baralhos" },
+    { "name": "Cards", "description": "Cartas" },
+    { "name": "Progress", "description": "Progresso do usuário" },
+    { "name": "Videos", "description": "Vídeos" },
+    { "name": "Chat", "description": "Chat e IA" },
+    { "name": "Payment", "description": "Pagamentos" },
+    { "name": "Classroom", "description": "Sala de aula" },
+    { "name": "Notifications", "description": "Notificações" },
+    { "name": "Streak", "description": "Sequência de estudos" },
+    { "name": "Books", "description": "Livros" }
+  ],
+  "paths": {
+    "/auth/register": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Registrar novo usuário",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["name", "email", "password"],
+              "properties": {
+                "name": { "type": "string", "example": "João Silva" },
+                "email": { "type": "string", "example": "joao@example.com" },
+                "password": { "type": "string", "example": "senha123" }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "201": { "description": "Usuário criado e token retornado" },
+          "400": { "description": "Dados faltando ou inválidos" }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Login",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["email", "password"],
+              "properties": {
+                "email": { "type": "string", "example": "joao@example.com" },
+                "password": { "type": "string", "example": "senha123" }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Token de acesso" },
+          "401": { "description": "Credenciais inválidas" }
+        }
+      }
+    },
+    "/auth/refresh_token": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Renovar token",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["token"],
+              "properties": { "token": { "type": "string" } }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Novo token" }, "401": { "description": "Token inválido" } }
+      }
+    },
+    "/auth/verify_code": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Verificar código de validação",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["code"],
+              "properties": { "code": { "type": "string" } }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Código válido" }, "401": { "description": "Código inválido" } }
+      }
+    },
+    "/auth/forgot_password": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Solicitar recuperação de senha",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["email"],
+              "properties": { "email": { "type": "string" } }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Se o email existir, código enviado" } }
+      }
+    },
+    "/auth/verify_reset_code": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Verificar código de recuperação",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["email", "code"],
+              "properties": {
+                "email": { "type": "string" },
+                "code": { "type": "string" }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Código válido" }, "400": { "description": "Código inválido" } }
+      }
+    },
+    "/auth/reset_password": {
+      "put": {
+        "tags": ["Auth"],
+        "summary": "Redefinir senha",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["email", "code", "password"],
+              "properties": {
+                "email": { "type": "string" },
+                "code": { "type": "string" },
+                "password": { "type": "string" }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Senha alterada" }, "400": { "description": "Dados inválidos" } }
+      }
+    },
+    "/auth/access_log": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Registrar log de acesso",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": { "type": "object", "properties": { "user_id": { "type": "string" } } }
+          }
+        ],
+        "responses": { "200": { "description": "Log salvo" }, "400": { "description": "user_id obrigatório" } }
+      }
+    },
+    "/auth/mail_list": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Cadastrar email na lista",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["email"],
+              "properties": {
+                "email": { "type": "string" },
+                "name": { "type": "string" }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "OK" }, "400": { "description": "email obrigatório" } }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Logout",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Logout realizado" } }
+      }
+    },
+    "/collections/create": {
+      "post": {
+        "tags": ["Collections"],
+        "summary": "Criar coleção",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["name"],
+              "properties": {
+                "name": { "type": "string" },
+                "user_id": { "type": "string" },
+                "image": { "type": "string" }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Coleção criada" }, "400": { "description": "name obrigatório" } }
+      }
+    },
+    "/collections/get": {
+      "get": {
+        "tags": ["Collections"],
+        "summary": "Listar todas as coleções",
+        "responses": { "200": { "description": "Lista de coleções" } }
+      }
+    },
+    "/collections/get_by_user": {
+      "get": {
+        "tags": ["Collections"],
+        "summary": "Coleções do usuário",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Lista de coleções" } }
+      }
+    },
+    "/collections/get/{deck_id}": {
+      "get": {
+        "tags": ["Collections"],
+        "summary": "Buscar coleção por ID",
+        "parameters": [{ "name": "deck_id", "in": "path", "required": true, "type": "string" }],
+        "responses": { "200": { "description": "Coleção" } }
+      }
+    },
+    "/collections/add_decks/{collection_id}": {
+      "patch": {
+        "tags": ["Collections"],
+        "summary": "Adicionar baralhos à coleção",
+        "parameters": [
+          { "name": "collection_id", "in": "path", "required": true, "type": "string" },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["deck_ids"],
+              "properties": { "deck_ids": { "type": "array", "items": { "type": "string" } } }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Baralhos adicionados" }, "404": { "description": "Coleção não encontrada" } }
+      }
+    },
+    "/collections/delete/{collection_id}": {
+      "delete": {
+        "tags": ["Collections"],
+        "summary": "Excluir coleção",
+        "parameters": [{ "name": "collection_id", "in": "path", "required": true, "type": "string" }],
+        "responses": { "200": { "description": "Excluída" }, "404": { "description": "Não encontrada" } }
+      }
+    },
+    "/collections/update/{collection_id}": {
+      "put": {
+        "tags": ["Collections"],
+        "summary": "Atualizar coleção",
+        "parameters": [
+          { "name": "collection_id", "in": "path", "required": true, "type": "string" },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": { "name": { "type": "string" }, "image": { "type": "string" } }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Atualizada" }, "404": { "description": "Não encontrada" } }
+      }
+    },
+    "/deck/create": {
+      "post": {
+        "tags": ["Decks"],
+        "summary": "Criar baralho",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["name", "collection_id"],
+              "properties": {
+                "name": { "type": "string" },
+                "collection_id": { "type": "string" },
+                "image": { "type": "string" },
+                "cards": { "type": "array" }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Baralho criado" }, "400": { "description": "Dados obrigatórios" } }
+      }
+    },
+    "/deck/get": {
+      "get": {
+        "tags": ["Decks"],
+        "summary": "Listar todos os baralhos",
+        "responses": { "200": { "description": "Lista de baralhos" } }
+      }
+    },
+    "/deck/get_by_collection_id": {
+      "get": {
+        "tags": ["Decks"],
+        "summary": "Baralhos por coleção",
+        "parameters": [
+          { "name": "collection_id", "in": "query", "required": true, "type": "string" },
+          { "name": "user_id", "in": "query", "required": true, "type": "string" }
+        ],
+        "responses": { "200": { "description": "Lista de baralhos" }, "400": { "description": "Parâmetros obrigatórios" } }
+      }
+    },
+    "/deck/save_deck": {
+      "post": {
+        "tags": ["Decks"],
+        "summary": "Salvar baralho na coleção do usuário",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["user_id", "deck_id", "collection_id"],
+              "properties": {
+                "user_id": { "type": "string" },
+                "deck_id": { "type": "string" },
+                "collection_id": { "type": "string" }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Salvo" }, "400": { "description": "Dados obrigatórios" } }
+      }
+    },
+    "/deck/check_if_the_user_has_the_deck": {
+      "post": {
+        "tags": ["Decks"],
+        "summary": "Verificar se usuário possui o baralho",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["user_id", "deck_id"],
+              "properties": { "user_id": { "type": "string" }, "deck_id": { "type": "string" } }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Resposta com flag" }, "400": { "description": "Dados obrigatórios" } }
+      }
+    },
+    "/card/create": {
+      "post": {
+        "tags": ["Cards"],
+        "summary": "Criar carta",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["front", "back"],
+              "properties": {
+                "front": { "type": "string" },
+                "back": { "type": "string" },
+                "deck_id": { "type": "string" },
+                "user_id": { "type": "string" },
+                "audio": { "type": "string" }
+              }
+            }
+          }
+        ],
+        "responses": { "201": { "description": "Carta criada" }, "400": { "description": "front/back obrigatórios" } }
+      }
+    },
+    "/card/create_card_in_lots": {
+      "post": {
+        "tags": ["Cards"],
+        "summary": "Criar cartas em lote",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["cards", "deck_name"],
+              "properties": {
+                "cards": { "type": "array", "items": { "type": "object" } },
+                "deck_name": { "type": "string" },
+                "image": { "type": "string" }
+              }
+            }
+          }
+        ],
+        "responses": { "201": { "description": "Cartas criadas" }, "400": { "description": "cards obrigatório" } }
+      }
+    },
+    "/card/get_all_cards": {
+      "get": {
+        "tags": ["Cards"],
+        "summary": "Listar todas as cartas",
+        "responses": { "200": { "description": "Lista de cartas" } }
+      }
+    },
+    "/card/get_cards_by_deck/{deck_id}": {
+      "get": {
+        "tags": ["Cards"],
+        "summary": "Cartas de um baralho",
+        "parameters": [{ "name": "deck_id", "in": "path", "required": true, "type": "string" }],
+        "responses": { "200": { "description": "Lista de cartas" }, "400": { "description": "Erro" } }
+      }
+    },
+    "/card/{card_id}": {
+      "get": {
+        "tags": ["Cards"],
+        "summary": "Buscar carta por ID",
+        "parameters": [{ "name": "card_id", "in": "path", "required": true, "type": "string" }],
+        "responses": { "200": { "description": "Carta" }, "404": { "description": "Não encontrada" } }
       },
-    "host": "http://127.0.0.1:5000",
-    "paths":{
-        "/login": {
-            "post": {
-              "tags": [
-                "Auth"
-              ],
-              "summary": "Perform authentication",
-              "responses": {
-                "200": {
-                  "schema": {
+      "put": {
+        "tags": ["Cards"],
+        "summary": "Atualizar carta",
+        "parameters": [
+          { "name": "card_id", "in": "path", "required": true, "type": "string" },
+          { "name": "body", "in": "body", "schema": { "type": "object" } }
+        ],
+        "responses": { "200": { "description": "Carta atualizada" }, "404": { "description": "Não encontrada" } }
+      },
+      "delete": {
+        "tags": ["Cards"],
+        "summary": "Excluir carta",
+        "parameters": [{ "name": "card_id", "in": "path", "required": true, "type": "string" }],
+        "responses": { "200": { "description": "Excluída" }, "404": { "description": "Não encontrada" } }
+      }
+    },
+    "/progress/": {
+      "post": {
+        "tags": ["Progress"],
+        "summary": "Criar ou atualizar progresso",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["user_id", "deck_id", "card_id"],
+              "properties": {
+                "user_id": { "type": "string" },
+                "deck_id": { "type": "string" },
+                "card_id": { "type": "string" }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Progresso atualizado" }, "400": { "description": "Dados obrigatórios" } }
+      }
+    },
+    "/progress/pending": {
+      "get": {
+        "tags": ["Progress"],
+        "summary": "Cartas pendentes do usuário",
+        "parameters": [
+          { "name": "user_id", "in": "query", "required": true, "type": "string" },
+          { "name": "deck_id", "in": "query", "type": "string" }
+        ],
+        "responses": { "200": { "description": "Lista de cartas pendentes" }, "400": { "description": "user_id obrigatório" } }
+      }
+    },
+    "/progress/update_status": {
+      "put": {
+        "tags": ["Progress"],
+        "summary": "Atualizar status de cartas",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["user_id", "cards"],
+              "properties": {
+                "user_id": { "type": "string" },
+                "cards": {
+                  "type": "array",
+                  "items": {
                     "type": "object",
-                    "properties": {
-                      "message": {
-                        "type": "string",
-                        "example": "ok"
-                      }
-                    }
+                    "properties": { "card_id": { "type": "string" }, "recall_level": { "type": "integer" } }
                   }
                 }
               }
             }
           }
+        ],
+        "responses": { "200": { "description": "Status atualizado" }, "400": { "description": "Dados inválidos" } }
+      }
+    },
+    "/video/create": {
+      "post": {
+        "tags": ["Videos"],
+        "summary": "Criar vídeo",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "title": { "type": "string" },
+                "thumbnail": { "type": "string" },
+                "deck_id": { "type": "string" },
+                "video_id": { "type": "string" }
+              }
+            }
+          }
+        ],
+        "responses": { "201": { "description": "Vídeo criado" }, "400": { "description": "Campos obrigatórios" } }
+      }
+    },
+    "/video/get": {
+      "get": {
+        "tags": ["Videos"],
+        "summary": "Listar vídeos",
+        "parameters": [{ "name": "language", "in": "query", "type": "string" }],
+        "responses": { "201": { "description": "Lista de vídeos" } }
+      }
+    },
+    "/chat/talk_to_me": {
+      "post": {
+        "tags": ["Chat"],
+        "summary": "Enviar mensagem no chat (IA)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "message": { "type": "string" },
+                "id": { "type": "string" },
+                "history": { "type": "array" },
+                "settings": { "type": "object" }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Resposta do chat" } }
+      }
+    },
+    "/chat/get_chats_by_user": {
+      "get": {
+        "tags": ["Chat"],
+        "summary": "Listar chats do usuário",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Lista de chats" } }
+      }
+    },
+    "/chat/generate_card": {
+      "post": {
+        "tags": ["Chat"],
+        "summary": "Gerar cartas a partir do chat",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": { "chat_id": { "type": "string" }, "settings": { "type": "object" } }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Cartas geradas" } }
+      }
+    },
+    "/payment/payment_intent": {
+      "post": {
+        "tags": ["Payment"],
+        "summary": "Criar intenção de assinatura",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Dados do pagamento" } }
+      }
+    },
+    "/payment/webhook": {
+      "post": {
+        "tags": ["Payment"],
+        "summary": "Webhook Stripe (uso interno)",
+        "parameters": [{ "name": "STRIPE_SIGNATURE", "in": "header", "required": true, "type": "string" }],
+        "responses": { "200": { "description": "Processado" } }
+      }
+    },
+    "/classroom/create": {
+      "post": {
+        "tags": ["Classroom"],
+        "summary": "Criar sala (professor)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["collection_id"],
+              "properties": { "collection_id": { "type": "string" } }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Sala criada" }, "401": { "description": "Apenas professor" } }
+      }
+    },
+    "/classroom/get_classrooms": {
+      "get": {
+        "tags": ["Classroom"],
+        "summary": "Listar salas do usuário",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Lista de salas" } }
+      }
+    },
+    "/classroom/add_user_in_classroom": {
+      "post": {
+        "tags": ["Classroom"],
+        "summary": "Adicionar aluno na sala (professor)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["classroom_id", "email_user"],
+              "properties": {
+                "classroom_id": { "type": "string" },
+                "email_user": { "type": "string" }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Aluno adicionado" }, "401": { "description": "Apenas professor" } }
+      }
+    },
+    "/classroom/generate_cards_by_subject": {
+      "post": {
+        "tags": ["Classroom"],
+        "summary": "Gerar cartas por assunto (IA)",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["subject", "language_front", "language_back"],
+              "properties": {
+                "subject": { "type": "string" },
+                "amount": { "type": "integer", "default": 20 },
+                "language_front": { "type": "string" },
+                "language_back": { "type": "string" },
+                "deck_id": { "type": "string" },
+                "deck_name": { "type": "string" },
+                "format": { "type": "string" }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Cartas geradas" }, "400": { "description": "subject e idiomas obrigatórios" } }
+      }
+    },
+    "/notifications/list": {
+      "get": {
+        "tags": ["Notifications"],
+        "summary": "Listar notificações",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Lista de notificações" } }
+      }
+    },
+    "/notifications/unread_count": {
+      "get": {
+        "tags": ["Notifications"],
+        "summary": "Contagem de não lidas",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "unread_count" } }
+      }
+    },
+    "/notifications/mark_as_read": {
+      "post": {
+        "tags": ["Notifications"],
+        "summary": "Marcar como lida(s)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "notification_id": { "type": "string" },
+                "mark_all": { "type": "boolean" }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Modificado" } }
+      }
+    },
+    "/notifications/send_daily": {
+      "post": {
+        "tags": ["Notifications"],
+        "summary": "Disparar notificações diárias (admin)",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Enviado" }, "401": { "description": "Apenas admin" } }
+      }
+    },
+    "/notifications/teacher/custom": {
+      "post": {
+        "tags": ["Notifications"],
+        "summary": "Notificação customizada para turma (professor)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["classroom_id", "title", "body"],
+              "properties": {
+                "classroom_id": { "type": "string" },
+                "title": { "type": "string" },
+                "body": { "type": "string" }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Enviada" }, "401": { "description": "Apenas professor" } }
+      }
+    },
+    "/notifications/admin/custom": {
+      "post": {
+        "tags": ["Notifications"],
+        "summary": "Notificação customizada (admin)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["title", "body"],
+              "properties": {
+                "title": { "type": "string" },
+                "body": { "type": "string" },
+                "user_ids": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Enviada" }, "401": { "description": "Apenas admin" } }
+      }
+    },
+    "/streak/get": {
+      "get": {
+        "tags": ["Streak"],
+        "summary": "Obter streak do usuário",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Dados do streak" } }
+      }
+    },
+    "/books/list": {
+      "get": {
+        "tags": ["Books"],
+        "summary": "Livros disponíveis para o usuário",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Lista de livros" } }
+      }
+    },
+    "/books/get/{book_id}": {
+      "get": {
+        "tags": ["Books"],
+        "summary": "Buscar livro por ID",
+        "security": [{ "Bearer": [] }],
+        "parameters": [{ "name": "book_id", "in": "path", "required": true, "type": "string" }],
+        "responses": { "200": { "description": "Livro" }, "403": { "description": "Sem acesso" }, "404": { "description": "Não encontrado" } }
+      }
+    },
+    "/books/purchase": {
+      "post": {
+        "tags": ["Books"],
+        "summary": "Comprar/adicionar livro à biblioteca",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["book_id"],
+              "properties": { "book_id": { "type": "string" } }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Livro adicionado" }, "404": { "description": "Livro não encontrado" } }
+      }
+    },
+    "/books/admin/create": {
+      "post": {
+        "tags": ["Books"],
+        "summary": "Criar livro (admin)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["titulo", "idioma", "nivel"],
+              "properties": {
+                "titulo": { "type": "string" },
+                "idioma": { "type": "string" },
+                "nivel": { "type": "string" }
+              }
+            }
+          }
+        ],
+        "responses": { "201": { "description": "Livro criado" }, "403": { "description": "Apenas admin" } }
+      }
+    },
+    "/books/admin/update/{book_id}": {
+      "put": {
+        "tags": ["Books"],
+        "summary": "Atualizar livro (admin)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          { "name": "book_id", "in": "path", "required": true, "type": "string" },
+          { "name": "body", "in": "body", "schema": { "type": "object" } }
+        ],
+        "responses": { "200": { "description": "Atualizado" }, "403": { "description": "Apenas admin" }, "404": { "description": "Não encontrado" } }
+      }
+    },
+    "/books/admin/delete/{book_id}": {
+      "delete": {
+        "tags": ["Books"],
+        "summary": "Excluir livro (admin)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [{ "name": "book_id", "in": "path", "required": true, "type": "string" }],
+        "responses": { "200": { "description": "Excluído" }, "403": { "description": "Apenas admin" }, "404": { "description": "Não encontrado" } }
+      }
+    },
+    "/books/admin/list": {
+      "get": {
+        "tags": ["Books"],
+        "summary": "Listar todos os livros (admin)",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Lista de livros" }, "403": { "description": "Apenas admin" } }
+      }
+    },
+    "/books/admin/book/{book_id}": {
+      "get": {
+        "tags": ["Books"],
+        "summary": "Livro com usuários (admin)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [{ "name": "book_id", "in": "path", "required": true, "type": "string" }],
+        "responses": { "200": { "description": "Livro e usuários" }, "403": { "description": "Apenas admin" }, "404": { "description": "Não encontrado" } }
+      }
+    },
+    "/books/admin/assign": {
+      "post": {
+        "tags": ["Books"],
+        "summary": "Atribuir livro a usuário (admin)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["user_id", "book_id"],
+              "properties": { "user_id": { "type": "string" }, "book_id": { "type": "string" } }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Atribuído" }, "403": { "description": "Apenas admin" }, "400": { "description": "user_id/book_id obrigatórios" } }
+      }
     }
-
+  }
 }
