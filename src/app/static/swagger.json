@@ -767,6 +767,37 @@
         "responses": { "200": { "description": "Modificado" } }
       }
     },
+    "/notifications/register_token": {
+      "post": {
+        "tags": ["Notifications"],
+        "summary": "Registrar token de push do dispositivo (app mobile)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["push_token"],
+              "properties": {
+                "push_token": { "type": "string", "description": "Token Expo Push do dispositivo" },
+                "device_info": {
+                  "type": "object",
+                  "properties": {
+                    "deviceName": { "type": "string" },
+                    "deviceType": { "type": "string" },
+                    "osName": { "type": "string" },
+                    "osVersion": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Token registrado" }, "400": { "description": "push_token obrigatório" } }
+      }
+    },
     "/notifications/send_daily": {
       "post": {
         "tags": ["Notifications"],

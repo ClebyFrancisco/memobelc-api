@@ -15,6 +15,7 @@ class PushNotificationModel:
 
 
 
+    @staticmethod
     def save_token(user_id, push_token, device_info=None):
         existing = mongo.db.push_notification.find_one({
             "user_id": user_id,

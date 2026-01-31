@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 from werkzeug.exceptions import BadRequest, Unauthorized
 
 from src.app.services.notification_service import NotificationService
+from src.app.models.push_notification_model import PushNotificationModel
 from src.app.middlewares.token_required import token_required
 
 
@@ -36,6 +37,25 @@ class NotificationController:
             mark_all=mark_all,
         )
         return jsonify({"modified": modified}), 200
+
+    @staticmethod
+    @token_required
+    def register_token(current_user, token):
+        """Registra o token de push do dispositivo para notificações (somente app mobile)."""
+        data = request.get_json() or {}
+        push_token = data.get("push_token")
+
+        if not push_token:
+            raise BadRequest(description="push_token é obrigatório")
+
+        device_info = data.get("device_info")
+
+        PushNotificationModel.save_token(
+            user_id=str(current_user._id),
+            push_token=push_token,
+            device_info=device_info,
+        )
+        return jsonify({"message": "Token registrado com sucesso"}), 200
 
     @staticmethod
     @token_required
@@ -99,6 +119,7 @@ notification_blueprint = Blueprint("notification_blueprint", __name__)
 notification_blueprint.route("/list", methods=["GET"])(NotificationController.list_notifications)
 notification_blueprint.route("/unread_count", methods=["GET"])(NotificationController.unread_count)
 notification_blueprint.route("/mark_as_read", methods=["POST"])(NotificationController.mark_as_read)
+notification_blueprint.route("/register_token", methods=["POST"])(NotificationController.register_token)
 
 # Rotas de disparo (teacher/admin)
 notification_blueprint.route("/send_daily", methods=["POST"])(NotificationController.send_daily)

@@ -2,10 +2,14 @@ import os
 import json
 from flask import Flask, request, Response
 from flask_swagger_ui import get_swaggerui_blueprint
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+
 from .database.mongo import mongo
 from .provider.mail import mail
 from .routes.routes import routes
 from .config import Config
+from .services.notification_service import NotificationService
 from flask_cors import CORS
 
 
@@ -64,4 +68,20 @@ def create_app():
     app.register_blueprint(SWAGGERUI_BLUEPRINT, url_prefix=SWAGGER_URL)
     app.register_blueprint(routes)
 
+    # Scheduler para envio de lembretes diários (9h da manhã, timezone do servidor)
+    if os.environ.get("ENABLE_DAILY_REMINDERS", "true").lower() == "true":
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(
+            func=lambda: _run_daily_reminders(app),
+            trigger=CronTrigger(hour=9, minute=0),
+            id="daily_study_reminder",
+        )
+        scheduler.start()
+
     return app
+
+
+def _run_daily_reminders(app):
+    """Executa envio de lembretes diários dentro do contexto da app."""
+    with app.app_context():
+        NotificationService.send_daily_study_notifications()
