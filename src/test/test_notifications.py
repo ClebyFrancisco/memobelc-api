@@ -1,0 +1,45 @@
+"""Testes das rotas de notificações."""
+import json
+import pytest
+
+
+def test_notifications_list_requires_auth(client):
+    response = client.get("/notifications/list")
+    assert response.status_code == 401
+
+
+def test_notifications_list(client, auth_headers):
+    response = client.get("/notifications/list", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.get_json()
+    assert "notifications" in data
+
+
+def test_notifications_unread_count_requires_auth(client):
+    response = client.get("/notifications/unread_count")
+    assert response.status_code == 401
+
+
+def test_notifications_unread_count(client, auth_headers):
+    response = client.get("/notifications/unread_count", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.get_json()
+    assert "unread_count" in data
+
+
+def test_notifications_mark_as_read_requires_auth(client):
+    response = client.post(
+        "/notifications/mark_as_read",
+        data=json.dumps({"notification_id": "507f1f77bcf86cd799439011"}),
+        content_type="application/json",
+    )
+    assert response.status_code == 401
+
+
+def test_notifications_mark_as_read(client, auth_headers):
+    response = client.post(
+        "/notifications/mark_as_read",
+        data=json.dumps({"mark_all": True}),
+        headers=auth_headers,
+    )
+    assert response.status_code in (200, 400)

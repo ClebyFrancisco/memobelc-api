@@ -13,8 +13,8 @@ class CardController:
         """This Method create a card"""
 
         data = request.get_json()
-        if ("front" or "back") not in data:
-            return BadRequest(description="the fields are mandatory")
+        if not data or "front" not in data or "back" not in data:
+            return jsonify({"error": "front and back are required"}), 400
         
         if "user_id" in data:
             user_id = data["user_id"]

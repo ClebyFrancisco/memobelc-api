@@ -38,7 +38,7 @@ class CollectionModel:
     def get_all_collections():
         """Retorna todos os collections como uma lista de dicionários"""
         collections = mongo.db.collections.find()
-        return [CollectionModel.to_dict(collection) for collection in collections]
+        return [CollectionModel(**c).to_dict() for c in collections]
     
     @staticmethod
     def get_by_id(deck_id):

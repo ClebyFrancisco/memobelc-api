@@ -72,13 +72,21 @@ class ClassroomController:
         else:
             format = None
             
-        response = ChatService.generate_cards_by_subject(subject=data.get("subject"), 
-                                                         amount=amount, deck_id=deck_id, 
-                                                         deck_name=deck_name, 
-                                                         language_front=data.get("language_front"), 
-                                                         language_back=data.get("language_back"),
-                                                         format=format)
-        return jsonify(response), 200
+        try:
+            response = ChatService.generate_cards_by_subject(
+                subject=data.get("subject"),
+                amount=amount,
+                deck_id=deck_id,
+                deck_name=deck_name,
+                language_front=data.get("language_front"),
+                language_back=data.get("language_back"),
+                format=format,
+            )
+            return jsonify(response), 200
+        except Exception as e:
+            if "429" in str(type(e).__name__) or "ResourceExhausted" in str(e):
+                return jsonify({"error": "API quota exceeded"}), 429
+            return jsonify({"error": str(e)}), 500
 
         
         

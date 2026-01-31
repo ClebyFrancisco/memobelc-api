@@ -4,10 +4,16 @@ from os import path, environ
 basedir = path.abspath(path.join(path.dirname(__file__), "../../"))
 load_dotenv(path.join(basedir, ".env"))
 
+# Em testes, usar MONGO_URI_TEST se definido (evita usar o banco oficial)
+_testing = environ.get("TESTING", "").lower() in ("1", "true", "yes")
+_default_mongo = environ.get("MONGO_URI_TEST") if _testing else environ.get("MONGO_URI")
+if not _default_mongo and not _testing:
+    _default_mongo = environ["MONGO_URI"]
+
 
 class Config:
     PYTHONPATH = "src"
-    MONGO_URI = environ["MONGO_URI"]
+    MONGO_URI = _default_mongo
     SECRET_KEY = environ["SECRET_KEY"]
     STRIPE_SECRET_KEY = environ["STRIPE_SECRET_KEY"]
     PRICE_ID = environ['PRICE_ID']

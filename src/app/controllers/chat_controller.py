@@ -8,15 +8,20 @@ class ChatController:
     @staticmethod
     @token_required
     def chat(current_user, token):
-
-        data = request.get_json()
-        
+        data = request.get_json() or {}
         history = data.get("history", [])
-        id = data.get('id', None)
-        message =data.get('message', '')
+        id = data.get("id", None)
+        message = data.get("message", "")
         settings = data.get("settings", {})
-        
-        return ChatService.chat(current_user._id, id,  history, settings, message)
+        try:
+            result = ChatService.chat(
+                current_user._id, id, history, settings, message
+            )
+            return jsonify(result), 200
+        except Exception as e:
+            if "429" in str(type(e).__name__) or "ResourceExhausted" in str(e):
+                return jsonify({"error": "API quota exceeded"}), 429
+            return jsonify({"error": str(e)}), 500
     
     @staticmethod
     @token_required
@@ -25,8 +30,12 @@ class ChatController:
         return jsonify(response), 200
     
     def generate_cards_by_chat():
-        data = request.get_json()
-        response = ChatService.generate_card(chat_id=data.get('chat_id'), settings=data.get('settings'))
+        data = request.get_json() or {}
+        response = ChatService.generate_card(
+            chat_id=data.get("chat_id"), settings=data.get("settings")
+        )
+        if response is None:
+            return jsonify({"error": "Chat not found"}), 404
         return jsonify(response), 200
     
 
