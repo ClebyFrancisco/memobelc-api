@@ -23,8 +23,11 @@ class CollectionService:
         return collection
 
     @staticmethod
-    def get_collections_by_user(user_id):
-        return CollectionModel.get_collections_by_user(user_id)
+    def get_collections_by_user(user_id, include_book_collections_for_admin=False):
+        """Retorna collections do usuário. Se admin, inclui também as collections dos livros."""
+        return CollectionModel.get_collections_by_user(
+            user_id, include_book_collections_for_admin=include_book_collections_for_admin
+        )
 
     @staticmethod
     def get_all_collections():
@@ -62,11 +65,14 @@ class CollectionService:
             return False
 
         # 0. Se a collection estiver sendo usada em uma classroom, não apagar
-        # (collection é "uma classroom" quando possui o campo classroom preenchido)
         if collection.get("classroom"):
             return False
-        
+
+        # 0b. Se a collection for a collection de um livro (book.collection_id), não apagar por aqui
+        # (deve ser removida ao deletar o livro)
         collection_obj_id = ObjectId(collection_id)
+        if mongo.db.books.find_one({"collection_id": collection_obj_id}):
+            return False
         decks_to_delete = []
         cards_to_delete = []
         

@@ -21,6 +21,7 @@ class BookModel:
         price=None,
         payment_link=None,
         chapters=None,
+        collection_id=None,
         created_at=None,
         updated_at=None,
         created_by=None,
@@ -36,6 +37,7 @@ class BookModel:
         self.price = price
         self.payment_link = payment_link
         self.chapters = chapters or []
+        self.collection_id = str(collection_id) if collection_id else None
         self.created_at = created_at or datetime.now(timezone.utc)
         self.updated_at = updated_at or datetime.now(timezone.utc)
         self.created_by = ObjectId(created_by) if created_by else None
@@ -53,6 +55,7 @@ class BookModel:
             'price': self.price,
             'payment_link': self.payment_link,
             'chapters': self.chapters,
+            'collection_id': ObjectId(self.collection_id) if self.collection_id else None,
             'created_at': self.created_at,
             'updated_at': self.updated_at,
             'created_by': self.created_by,
@@ -78,6 +81,7 @@ class BookModel:
             'price': self.price,
             'payment_link': self.payment_link,
             'chapters': self.chapters,
+            'collection_id': ObjectId(self.collection_id) if self.collection_id else None,
             'updated_at': datetime.now(timezone.utc),
         }
 
@@ -151,11 +155,24 @@ class BookModel:
 
     @staticmethod
     def delete_book(book_id):
-        """Deleta um livro e todos os recursos relacionados."""
+        """Deleta um livro e todos os recursos relacionados (collection e decks do livro)."""
+        book = mongo.db.books.find_one({"_id": ObjectId(book_id)})
+        if not book:
+            return False
+
         book_obj_id = ObjectId(book_id)
+        collection_id = book.get("collection_id")
 
         # Remove dos usuários
         mongo.db.user_books.delete_many({"book_id": book_obj_id})
+
+        # Remove collection e decks do livro (decks órfãos são removidos)
+        if collection_id:
+            coll = mongo.db.collections.find_one({"_id": collection_id})
+            if coll and coll.get("decks"):
+                for deck_id in coll["decks"]:
+                    mongo.db.decks.delete_one({"_id": deck_id})
+            mongo.db.collections.delete_one({"_id": collection_id})
 
         # Deleta o livro
         result = mongo.db.books.delete_one({"_id": book_obj_id})
@@ -175,6 +192,7 @@ class BookModel:
             'price': self.price,
             'payment_link': self.payment_link,
             'chapters': self.chapters,
+            'collection_id': str(self.collection_id) if self.collection_id else None,
             'created_at': self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at,
             'updated_at': self.updated_at.isoformat() if isinstance(self.updated_at, datetime) else self.updated_at,
             'created_by': str(self.created_by) if self.created_by else None,
