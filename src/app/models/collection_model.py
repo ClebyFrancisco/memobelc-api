@@ -7,7 +7,7 @@ from .user_progress_model import UserProgressModel
 
 
 class CollectionModel:
-    def __init__(self, _id=None, name=None, created_at=None, updated_at=None, image=None, decks=None, user=None, classroom=None):
+    def __init__(self, _id=None, name=None, created_at=None, updated_at=None, image=None, decks=None, user=None, classroom=None, book_id=None):
         self._id = str(_id) if _id else None
         self.name = name
         self.created_at = created_at or datetime.now(timezone.utc)
@@ -16,6 +16,7 @@ class CollectionModel:
         self.decks = decks or []
         self.user = user
         self.classroom = classroom
+        self.book_id = str(book_id) if book_id else None
 
     def save_to_db(self):
         """Salva o Masterdeck no banco de dados MongoDB"""
@@ -26,8 +27,11 @@ class CollectionModel:
             'image': self.image,
             'decks': self.decks
         }
+        if self.book_id is not None:
+            deck_data['book_id'] = ObjectId(self.book_id)
         result = mongo.db.collections.insert_one(deck_data)
-        self.id = str(result.inserted_id)
+        self._id = str(result.inserted_id)
+        self.id = self._id
 
         if self.user:
             UserModel.add_collections_to_user(self.user, [str(result.inserted_id)])
@@ -60,95 +64,98 @@ class CollectionModel:
     
 
     @staticmethod
-    def get_collections_by_user(user_id):
-        """"Busca todos os master decks do user e retorna a quantidade de cartas totais e pendentes."""
+    def get_collections_by_user(user_id, include_book_collections_for_admin=False):
+        """Busca collections do user. Se include_book_collections_for_admin=True, inclui também as collections dos livros (visível só para admin)."""
         user = UserModel.find_by_id(user_id)
         if not user:
-            # Usuário não encontrado: retorna lista vazia em vez de quebrar com 500
             return {"collections": []}
 
         user = user.to_dict()
-
         collections_list = []
-        
-    
+
         for collection_id in user.get("collections", []):
             collection = CollectionModel.get_by_id(collection_id)
-            # Se a collection não existir mais, ignora para evitar erro 500
             if not collection:
                 continue
-
-            total_cards_in_collection = 0
-            pending_cards_in_collection = 0
-
-            list_deck_in_collection = []
-            review_collections_cards = []
-            
-            
-            
-            from .deck_model import DeckModel
-
-            
-            for deck_id in collection.get("decks", []):
-                deck = DeckModel.get_by_id(deck_id)
-                # Se o deck não existir mais, ignora
-                if not deck:
-                    continue
-
-
-
-                
-                cards_count =  len(deck.get("cards", []))
-                total_cards_in_collection += cards_count
-
-                
-                pending_count = UserProgressModel.count_pending_cards(user_id, deck_id)
-                pending_cards_in_collection += pending_count
-                
-                
-                review_cards = UserProgressModel.get_pending_cards(user_id, deck_id)
-                
-                for card in review_cards:
-                    review_collections_cards.append(card)
-
-                deck.update({
-                    "total_cards": cards_count,
-                    "pending_cards": pending_count,
-                    "review_cards": review_cards
-
-                })
-                
-
-                list_deck_in_collection.append(deck)
-
-            
-            collection.update({
-                "total_cards": total_cards_in_collection,
-                "pending_cards": pending_cards_in_collection,
-                "decks": list_deck_in_collection,
-                "review_collections_cards": review_collections_cards
-            })
-            
-            
+            collection = dict(collection)
+            CollectionModel._enrich_collection_with_decks(collection, user_id)
+            if collection.get("book_id"):
+                collection["is_book_collection"] = True
+                book = mongo.db.books.find_one(
+                    {"_id": ObjectId(collection["book_id"])},
+                    {"titulo": 1},
+                )
+                collection["book_titulo"] = book.get("titulo", "") if book else ""
             collections_list.append(collection)
 
-        return {
-            "collections":collections_list
-            }
-    
+        if include_book_collections_for_admin:
+            book_collections = CollectionModel.get_book_collections(user_id)
+            collections_list.extend(book_collections)
+
+        return {"collections": collections_list}
+
+    @staticmethod
+    def _enrich_collection_with_decks(collection, user_id):
+        """Enriquece um dict de collection com decks, total_cards, pending_cards e review_collections_cards."""
+        from .deck_model import DeckModel
+        total_cards_in_collection = 0
+        pending_cards_in_collection = 0
+        list_deck_in_collection = []
+        review_collections_cards = []
+        for deck_id in collection.get("decks", []):
+            deck = DeckModel.get_by_id(deck_id)
+            if not deck:
+                continue
+            cards_count = len(deck.get("cards", []))
+            total_cards_in_collection += cards_count
+            pending_count = UserProgressModel.count_pending_cards(user_id, deck_id) if user_id else 0
+            pending_cards_in_collection += pending_count
+            review_cards = UserProgressModel.get_pending_cards(user_id, deck_id) if user_id else []
+            for card in review_cards:
+                review_collections_cards.append(card)
+            deck.update({
+                "total_cards": cards_count,
+                "pending_cards": pending_count,
+                "review_cards": review_cards,
+            })
+            list_deck_in_collection.append(deck)
+        collection.update({
+            "total_cards": total_cards_in_collection,
+            "pending_cards": pending_cards_in_collection,
+            "decks": list_deck_in_collection,
+            "review_collections_cards": review_collections_cards,
+        })
+        return collection
+
+    @staticmethod
+    def get_book_collections(user_id=None):
+        """Retorna as collections dos livros (collection_id dos books). Só para uso admin."""
+        books = mongo.db.books.find({"collection_id": {"$exists": True, "$ne": None}})
+        collections_list = []
+        for book in books:
+            collection_id = book.get("collection_id")
+            if not collection_id:
+                continue
+            collection_id_str = str(collection_id)
+            collection = CollectionModel.get_by_id(collection_id_str)
+            if not collection:
+                continue
+            collection = dict(collection)
+            CollectionModel._enrich_collection_with_decks(collection, user_id)
+            collection["is_book_collection"] = True
+            collection["book_id"] = str(book["_id"])
+            collection["book_titulo"] = book.get("titulo") or ""
+            collections_list.append(collection)
+        return collections_list
 
     @staticmethod
     def add_decks_to_collection(collection_id, deck_ids):
-        """Adiciona uma lista de deck IDs ao Collection especificado"""
-        
+        """Adiciona uma lista de deck IDs ao Collection especificado (evita duplicatas com $addToSet)."""
         deck_object_ids = [ObjectId(deck_id) for deck_id in deck_ids]
-        
-        
         result = mongo.db.collections.update_one(
             {"_id": ObjectId(collection_id)},
-            {"$push": {"decks": {"$each": deck_object_ids}}, "$set": {"updated_at": datetime.now(timezone.utc)}}
+            {"$addToSet": {"decks": {"$each": deck_object_ids}}, "$set": {"updated_at": datetime.now(timezone.utc)}}
         )
-        
         return result.modified_count > 0
     
     @staticmethod
@@ -181,6 +188,20 @@ class CollectionModel:
         return result.modified_count > 0
     
 
+    @staticmethod
+    def get_user_collection_by_book_id(user_id, book_id):
+        """Retorna a collection do usuário associada ao livro (criada ao salvar cartas de um capítulo)."""
+        user = UserModel.find_by_id(user_id)
+        if not user:
+            return None
+        user = user.to_dict() if hasattr(user, "to_dict") else user
+        book_id_str = str(book_id)
+        for collection_id in user.get("collections", []):
+            collection = CollectionModel.get_by_id(collection_id)
+            if collection and collection.get("book_id") == book_id_str:
+                return collection
+        return None
+
     def to_dict(self):
         """Converte um documento collection para dicionário"""
         return {
@@ -189,7 +210,8 @@ class CollectionModel:
             'created_at': self.created_at,
             'updated_at': self.updated_at,
             'image': self.image,
-            'decks': [str(ObjectId(deck_id)) for deck_id in self.decks],
-            'classroom':str(self.classroom) if self.classroom else self.classroom
+            'decks': [str(deck_id) for deck_id in self.decks],
+            'classroom': str(self.classroom) if self.classroom else self.classroom,
+            'book_id': self.book_id,
         }
 

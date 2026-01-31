@@ -79,25 +79,21 @@ class BookController:
     @staticmethod
     @token_required
     def get_book_by_id(current_user, token, book_id):
-        """Busca um livro pelo ID."""
-        book = BookService.get_book_by_id(book_id)
-
+        """Busca um livro pelo ID. Para usuário logado retorna capítulos com has_cards e user_has_saved."""
+        book = BookService.get_book_by_id_for_user(book_id, current_user._id)
+        if not book:
+            book = BookService.get_book_by_id(book_id)
         if not book:
             return jsonify({"error": "Book not found"}), 404
 
         # Verifica se o usuário tem acesso ao livro
         if not book.get("is_free"):
-            from src.app import mongo
-            from bson import ObjectId
-
             user_obj_id = ObjectId(current_user._id)
             book_obj_id = ObjectId(book_id)
-
             has_access = mongo.db.user_books.find_one({
                 "user_id": user_obj_id,
                 "book_id": book_obj_id,
             })
-
             if not has_access:
                 return jsonify({"error": "Access denied. Book requires payment."}), 403
 
@@ -184,6 +180,72 @@ class BookController:
         BookService.add_book_to_user(user_id, book_id)
         return jsonify({"message": "Book assigned to user"}), 200
 
+    @staticmethod
+    @token_required
+    def admin_generate_collection(current_user, token, book_id):
+        """Gera collection e decks para livro que ainda não tem collection_id (apenas admin)."""
+        if current_user.role != "admin":
+            return jsonify({"error": "Unauthorized"}), 403
+
+        result = BookService.generate_collection_for_book(book_id)
+        if result is None:
+            return jsonify({"error": "Book not found"}), 404
+        if result.get("already"):
+            return jsonify({"message": "Book already has collection", "collection_id": result["collection_id"]}), 200
+        return jsonify(result), 200
+
+    @staticmethod
+    @token_required
+    def admin_add_chapter(current_user, token):
+        """Adiciona um capítulo ao livro (apenas admin). Cria um deck na collection do livro."""
+        if current_user.role != "admin":
+            return jsonify({"error": "Unauthorized"}), 403
+
+        data = request.get_json()
+        book_id = data.get("book_id")
+        title = data.get("title")
+        if not book_id or not title:
+            return jsonify({"error": "Missing book_id or title"}), 400
+
+        result = BookService.add_chapter(book_id, title, data.get("content"))
+        if not result:
+            return jsonify({"error": "Book not found"}), 404
+        return jsonify(result), 201
+
+    @staticmethod
+    @token_required
+    def admin_add_cards_to_chapter(current_user, token):
+        """Adiciona cartas ao deck de um capítulo (apenas admin)."""
+        if current_user.role != "admin":
+            return jsonify({"error": "Unauthorized"}), 403
+
+        data = request.get_json()
+        book_id = data.get("book_id")
+        deck_id = data.get("deck_id")
+        card_ids = data.get("card_ids", [])
+        if not book_id or not deck_id or not card_ids:
+            return jsonify({"error": "Missing book_id, deck_id or card_ids"}), 400
+
+        ok = BookService.add_cards_to_chapter(book_id, deck_id, card_ids)
+        if not ok:
+            return jsonify({"error": "Book not found or deck does not belong to book"}), 404
+        return jsonify({"message": "Cards added to chapter"}), 200
+
+    @staticmethod
+    @token_required
+    def save_chapter_cards(current_user, token):
+        """Usuário salva as cartas do capítulo: a collection do livro passa a ser dele e é gerado progresso."""
+        data = request.get_json()
+        book_id = data.get("book_id")
+        deck_id = data.get("deck_id")
+        if not book_id or not deck_id:
+            return jsonify({"error": "Missing book_id or deck_id"}), 400
+
+        result = BookService.save_chapter_cards(current_user._id, book_id, deck_id)
+        if result is None:
+            return jsonify({"error": "Book not found or deck does not belong to book"}), 404
+        return jsonify(result), 200
+
 
 # Blueprint para as rotas
 books_blueprint = Blueprint("books_blueprint", __name__)
@@ -207,10 +269,22 @@ books_blueprint.route("/admin/book/<string:book_id>", methods=["GET"])(
 books_blueprint.route("/admin/assign", methods=["POST"])(
     BookController.admin_assign_book_to_user
 )
+books_blueprint.route("/admin/generate-collection/<string:book_id>", methods=["POST"])(
+    BookController.admin_generate_collection
+)
+books_blueprint.route("/admin/add-chapter", methods=["POST"])(
+    BookController.admin_add_chapter
+)
+books_blueprint.route("/admin/add-cards-to-chapter", methods=["POST"])(
+    BookController.admin_add_cards_to_chapter
+)
 
 # Rotas usuário
 books_blueprint.route("/list", methods=["GET"])(
     BookController.get_available_books
+)
+books_blueprint.route("/save-chapter-cards", methods=["POST"])(
+    BookController.save_chapter_cards
 )
 books_blueprint.route("/get/<string:book_id>", methods=["GET"])(
     BookController.get_book_by_id

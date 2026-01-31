@@ -40,9 +40,12 @@ class CollectionsController:
     @staticmethod
     @token_required
     def get_collections_by_user(current_user, token):
-        """This method get collections by user_id"""
+        """Retorna collections do usuário. Para admin, inclui também as collections dos livros (visíveis só para admin)."""
 
-        result = CollectionService.get_collections_by_user(current_user._id)
+        is_admin = getattr(current_user, "role", None) == "admin"
+        result = CollectionService.get_collections_by_user(
+            current_user._id, include_book_collections_for_admin=is_admin
+        )
         return jsonify(result), 200
 
     @staticmethod
