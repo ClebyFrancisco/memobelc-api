@@ -69,7 +69,14 @@ def create_app():
     app.register_blueprint(routes)
 
     # Scheduler para envio de lembretes diários (9h da manhã, timezone do servidor)
-    if os.environ.get("ENABLE_DAILY_REMINDERS", "true").lower() == "true":
+    # IMPORTANTE: APScheduler deve rodar em APENAS 1 worker para evitar duplicação
+    # Verifica se é o worker principal usando variáveis de ambiente do gunicorn
+    is_scheduler_enabled = os.environ.get("ENABLE_DAILY_REMINDERS", "false").lower() == "true"
+    is_main_worker = os.environ.get("SERVER_SOFTWARE", "").startswith("gunicorn") is False or \
+                     os.environ.get("WERKZEUG_RUN_MAIN") == "true" or \
+                     os.environ.get("GUNICORN_WORKER_ID") in (None, "1")
+    
+    if is_scheduler_enabled and is_main_worker:
         scheduler = BackgroundScheduler()
         scheduler.add_job(
             func=lambda: _run_daily_reminders(app),
@@ -77,6 +84,7 @@ def create_app():
             id="daily_study_reminder",
         )
         scheduler.start()
+        app.logger.info("✅ APScheduler iniciado no worker principal")
 
     return app
 
