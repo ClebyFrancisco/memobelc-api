@@ -26,5 +26,11 @@ import os
 app = create_app()
 
 if __name__ == "__main__":
-    print(Config.PORT)
-    app.run(host="0.0.0.0", port=Config.PORT, debug=True)
+    # ATENÇÃO: Este modo é APENAS para desenvolvimento local!
+    # Em produção, SEMPRE use: gunicorn -c gunicorn.conf.py run:app
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    print(f"🚀 Starting Flask development server on port {Config.PORT}")
+    print(f"⚠️  DEBUG MODE: {debug_mode}")
+    if debug_mode:
+        print("⚠️  WARNING: Debug mode is ENABLED. Do NOT use in production!")
+    app.run(host="0.0.0.0", port=Config.PORT, debug=debug_mode)

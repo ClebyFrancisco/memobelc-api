@@ -31,7 +31,8 @@ class Config:
     
     FRONT_BASE_URL = environ["FRONT_BASE_URL"]
 
-    FLASK_ENV = "development"
+    FLASK_ENV = environ.get("FLASK_ENV", "production")
+    DEBUG = FLASK_ENV == "development"
     PORT = int(environ["PORT"])
 
 
