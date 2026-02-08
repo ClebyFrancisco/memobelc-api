@@ -1,5 +1,8 @@
 from src.app.models.card_model import CardModel
+from src.app.models.deck_model import DeckModel
 from datetime import datetime, timezone
+from bson import ObjectId
+from src.app import mongo
 
 from src.app.services.notification_service import NotificationService
 
@@ -80,3 +83,68 @@ class CardService:
             card = CardModel(**card)
         card.delete_from_db()
         return True
+
+    @staticmethod
+    def check_card_permission(card_id, user_id, user_role):
+        """
+        Verifica se o usuário tem permissão para editar/excluir um card.
+        Retorna um dict com: {"can_edit": bool, "reason": str}
+        """
+        # Admin pode editar tudo
+        if user_role == "admin":
+            return {"can_edit": True, "reason": "admin"}
+        
+        # Busca o card
+        card = CardModel.get_by_id(card_id)
+        if not card:
+            return {"can_edit": False, "reason": "card_not_found"}
+        
+        if isinstance(card, dict):
+            card_dict = card
+        else:
+            card_dict = card.to_dict()
+        
+        deck_id = card_dict.get("deck")
+        if not deck_id:
+            return {"can_edit": False, "reason": "no_deck"}
+        
+        # Busca o deck
+        deck = DeckModel.get_by_id(deck_id)
+        if not deck:
+            return {"can_edit": False, "reason": "deck_not_found"}
+        
+        if isinstance(deck, dict):
+            deck_dict = deck
+        else:
+            deck_dict = deck.to_dict()
+        
+        collection_id = deck_dict.get("collection")
+        if not collection_id:
+            return {"can_edit": False, "reason": "no_collection"}
+        
+        # Busca a collection
+        collection = mongo.db.collections.find_one({"_id": ObjectId(collection_id)})
+        if not collection:
+            return {"can_edit": False, "reason": "collection_not_found"}
+        
+        # Verifica se é uma collection de livro
+        if collection.get("book_id"):
+            return {"can_edit": False, "reason": "book_collection_only_admin"}
+        
+        # Verifica se é uma collection de classroom
+        if collection.get("classroom"):
+            classroom = mongo.db.classrooms.find_one({"_id": ObjectId(collection.get("classroom"))})
+            if classroom:
+                teacher_id = str(classroom.get("teacher"))
+                if teacher_id == user_id:
+                    return {"can_edit": True, "reason": "classroom_teacher"}
+                else:
+                    return {"can_edit": False, "reason": "not_classroom_teacher"}
+        
+        # Collection pessoal - verifica se o usuário é dono
+        collection_user_id = str(collection.get("user"))
+        if collection_user_id == user_id:
+            return {"can_edit": True, "reason": "personal_collection_owner"}
+        
+        return {"can_edit": False, "reason": "no_permission"}
+
