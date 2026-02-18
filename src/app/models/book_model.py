@@ -151,6 +151,8 @@ class BookModel:
                 "user_id": user_obj_id,
                 "book_id": book_obj_id,
                 "added_at": datetime.now(timezone.utc),
+                # Lista de ordens de capítulos que o usuário já marcou como lidos
+                "read_chapters_ordem": [],
             })
 
     @staticmethod

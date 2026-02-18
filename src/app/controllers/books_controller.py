@@ -246,6 +246,28 @@ class BookController:
             return jsonify({"error": "Book not found or deck does not belong to book"}), 404
         return jsonify(result), 200
 
+    @staticmethod
+    @token_required
+    def mark_chapter_read(current_user, token):
+        """Marca ou desmarca um capítulo como lido para o usuário."""
+        data = request.get_json()
+        book_id = data.get("book_id")
+        chapter_ordem = data.get("chapter_ordem")
+        read = data.get("read", True)
+
+        if not book_id or chapter_ordem is None:
+            return jsonify({"error": "Missing book_id or chapter_ordem"}), 400
+
+        try:
+            chapter_ordem_int = int(chapter_ordem)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid chapter_ordem"}), 400
+
+        result = BookService.mark_chapter_read(str(current_user._id), book_id, chapter_ordem_int, read)
+        if result is None:
+            return jsonify({"error": "Book or chapter not found"}), 404
+        return jsonify(result), 200
+
 
 # Blueprint para as rotas
 books_blueprint = Blueprint("books_blueprint", __name__)
@@ -291,4 +313,7 @@ books_blueprint.route("/get/<string:book_id>", methods=["GET"])(
 )
 books_blueprint.route("/purchase", methods=["POST"])(
     BookController.purchase_book
+)
+books_blueprint.route("/mark-chapter-read", methods=["POST"])(
+    BookController.mark_chapter_read
 )

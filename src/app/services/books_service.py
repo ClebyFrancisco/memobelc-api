@@ -1,11 +1,14 @@
 """Service for handling books operations."""
 
+from datetime import datetime, timezone
 from bson import ObjectId
+from src.app import mongo
 from src.app.models.book_model import BookModel
 from src.app.models.collection_model import CollectionModel
 from src.app.models.deck_model import DeckModel
 from src.app.models.user_model import UserModel
 from src.app.models.user_progress_model import UserProgressModel
+from src.app.services.user_streak_service import UserStreakService
 
 
 class BookService:
@@ -40,6 +43,7 @@ class BookService:
                 "pdf_url": ch.get("pdf_url") or "",
                 "images_urls": ch.get("images_urls") or [],
                 "audio_url": ch.get("audio_url") or "",
+                "intro_duration": ch.get("intro_duration") or 0,
                 "deck_id": deck_id,
             }
             chapters_with_decks.append(chapter_data)
@@ -70,18 +74,32 @@ class BookService:
         chapters = data.get("chapters", book.get("chapters", []))
         collection_id = book.get("collection_id")
         capa = data.get("capa") or book.get("capa")
+        existing_chapters = book.get("chapters", [])
 
         # Para capítulos existentes (com deck_id) preserva todos os campos; para novos cria deck
         chapters_with_decks = []
         for idx, ch in enumerate(chapters):
             if ch.get("deck_id"):
-                # Mantém campos do app: titulo, ordem, pdf_url, images_urls, audio_url
+                # Mantém campos do app: titulo, ordem, pdf_url, images_urls, audio_url, intro_duration
                 merged = dict(ch)
                 merged["titulo"] = ch.get("titulo") or ch.get("title") or ""
                 merged["ordem"] = ch.get("ordem", idx + 1)
                 merged["pdf_url"] = ch.get("pdf_url") or ""
                 merged["images_urls"] = ch.get("images_urls") or []
                 merged["audio_url"] = ch.get("audio_url") or ""
+                merged["intro_duration"] = ch.get("intro_duration") or 0
+                # Preserva title e content do capítulo existente (frontend não envia)
+                deck_id_val = ch.get("deck_id")
+                existing = next(
+                    (ec for ec in existing_chapters if str(ec.get("deck_id")) == str(deck_id_val)),
+                    None,
+                )
+                if existing:
+                    merged.setdefault("title", existing.get("title") or merged.get("titulo") or "")
+                    merged.setdefault("content", existing.get("content") or existing.get("conteudo") or "")
+                else:
+                    merged.setdefault("title", merged.get("titulo") or "")
+                    merged.setdefault("content", "")
                 chapters_with_decks.append(merged)
                 continue
             chapter_title = ch.get("title") or ch.get("titulo") or "Chapter"
@@ -99,6 +117,7 @@ class BookService:
                 "pdf_url": ch.get("pdf_url") or "",
                 "images_urls": ch.get("images_urls") or [],
                 "audio_url": ch.get("audio_url") or "",
+                "intro_duration": ch.get("intro_duration") or 0,
                 "deck_id": deck_id,
             }
             chapters_with_decks.append(chapter_data)
@@ -137,16 +156,40 @@ class BookService:
 
     @staticmethod
     def get_book_by_id_for_user(book_id, user_id):
-        """Busca um livro pelo ID com flags por capítulo: has_cards e user_has_saved."""
+        """Busca um livro pelo ID com flags por capítulo: has_cards, user_has_saved e user_has_read."""
         book = BookModel.get_by_id(book_id)
         if not book:
             return None
+
+        # Busca progresso de capítulos lidos pelo usuário (armazenado em user_books)
+        user_obj_id = ObjectId(user_id)
+        book_obj_id = ObjectId(book_id)
+        user_book = mongo.db.user_books.find_one(
+            {
+                "user_id": user_obj_id,
+                "book_id": book_obj_id,
+            }
+        )
+        read_ordens = set(user_book.get("read_chapters_ordem", [])) if user_book else set()
+
         chapters = book.get("chapters", [])
         enriched = []
-        for ch in chapters:
+        # Usa índice (1-based) como referência estável de capítulo para progresso,
+        # inclusive para livros antigos que não têm campo "ordem".
+        for idx, ch in enumerate(chapters, start=1):
             deck_id = ch.get("deck_id")
+            ordem = ch.get("ordem", idx)
             if not deck_id:
-                enriched.append({**ch, "deck_id": None, "has_cards": False, "user_has_saved": False})
+                enriched.append(
+                    {
+                        **ch,
+                        "ordem": ordem,
+                        "deck_id": None,
+                        "has_cards": False,
+                        "user_has_saved": False,
+                        "user_has_read": idx in read_ordens,
+                    }
+                )
                 continue
             deck = DeckModel.get_by_id(deck_id)
             cards_count = len(deck.get("cards", [])) if deck else 0
@@ -154,12 +197,16 @@ class BookService:
             user_has_saved = (
                 DeckModel.check_if_the_user_has_the_deck(user_id, deck_id).get("user_has_deck") == "true"
             )
-            enriched.append({
-                **ch,
-                "deck_id": deck_id,
-                "has_cards": has_cards,
-                "user_has_saved": user_has_saved,
-            })
+            enriched.append(
+                {
+                    **ch,
+                    "ordem": ordem,
+                    "deck_id": deck_id,
+                    "has_cards": has_cards,
+                    "user_has_saved": user_has_saved,
+                    "user_has_read": idx in read_ordens,
+                }
+            )
         book = dict(book)
         book["chapters"] = enriched
         return book
@@ -197,6 +244,7 @@ class BookService:
             chapter_data.setdefault("pdf_url", "")
             chapter_data.setdefault("images_urls", [])
             chapter_data.setdefault("audio_url", "")
+            chapter_data.setdefault("intro_duration", 0)
             chapter_data.setdefault("content", "")
             chapters_with_decks.append(chapter_data)
 
@@ -313,4 +361,66 @@ class BookService:
     def add_book_to_user(user_id, book_id):
         """Adiciona um livro à biblioteca do usuário."""
         BookModel.add_book_to_user(user_id, book_id)
+
+    @staticmethod
+    def mark_chapter_read(user_id, book_id, chapter_ordem: int, read: bool = True):
+        """Marca ou desmarca um capítulo como lido para o usuário.
+
+        Também registra o dia de estudo para o streak quando marcado como lido.
+        """
+        book = BookModel.get_by_id(book_id)
+        if not book:
+            return None
+
+        chapters = book.get("chapters", [])
+        # Garante que o capítulo existe usando índice (1-based)
+        if chapter_ordem < 1 or chapter_ordem > len(chapters):
+            return None
+
+        user_obj_id = ObjectId(user_id)
+        book_obj_id = ObjectId(book_id)
+
+        user_book = mongo.db.user_books.find_one(
+            {
+                "user_id": user_obj_id,
+                "book_id": book_obj_id,
+            }
+        )
+
+        # Se ainda não existe registro do livro para o usuário (por exemplo, livro gratuito),
+        # cria o documento em user_books com controle de capítulos lidos.
+        if not user_book:
+            user_book = {
+                "user_id": user_obj_id,
+                "book_id": book_obj_id,
+                "added_at": datetime.now(timezone.utc),
+                "read_chapters_ordem": [],
+            }
+            mongo.db.user_books.insert_one(user_book)
+
+        # Atualiza lista de capítulos lidos
+        update_query = {}
+        if read:
+            update_query["$addToSet"] = {"read_chapters_ordem": chapter_ordem}
+        else:
+            update_query["$pull"] = {"read_chapters_ordem": chapter_ordem}
+
+        mongo.db.user_books.update_one(
+            {"user_id": user_obj_id, "book_id": book_obj_id},
+            update_query,
+        )
+
+        # Se marcou como lido, registra streak do dia
+        if read:
+            UserStreakService.record_study(user_id)
+
+        # Retorna estado atualizado de capítulos lidos
+        updated = mongo.db.user_books.find_one(
+            {
+                "user_id": user_obj_id,
+                "book_id": book_obj_id,
+            }
+        )
+        read_ordens = updated.get("read_chapters_ordem", []) if updated else []
+        return {"read_chapters_ordem": read_ordens}
 
