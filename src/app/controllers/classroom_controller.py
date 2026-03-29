@@ -43,6 +43,21 @@ class ClassroomController:
         return jsonify(result), 200
     
     
+    @staticmethod
+    @token_required
+    def get_student_profile(current_user, token, classroom_id, student_id):
+        if current_user.role != 'teacher':
+            return jsonify({'error': 'Unauthorized'}), 403
+        try:
+            result = ClassroomService.get_student_classroom_profile(classroom_id, student_id)
+            if not result:
+                return jsonify({'error': 'Student not found'}), 404
+            return jsonify(result), 200
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+
     def generate_cards_by_subject():
         data = request.get_json()
         
@@ -96,5 +111,6 @@ classroom_blueprint.route("/create", methods=["POST"])(ClassroomController.creat
 classroom_blueprint.route("/get_classrooms", methods=['GET'])(ClassroomController.getClassrooms)
 classroom_blueprint.route("/add_user_in_classroom", methods=['POST'])(ClassroomController.add_students)
 classroom_blueprint.route("/generate_cards_by_subject", methods=["POST"])(ClassroomController.generate_cards_by_subject)
+classroom_blueprint.route("/<classroom_id>/student/<student_id>/profile", methods=["GET"])(ClassroomController.get_student_profile)
 
         

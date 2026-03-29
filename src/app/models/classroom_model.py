@@ -72,6 +72,36 @@ class ClassroomModel:
     
     
     @staticmethod
+    def get_classrooms_as_student(user_id):
+        pipeline = [
+            {"$match": {"students": ObjectId(user_id)}},
+            {
+                "$lookup": {
+                    "from": "collections",
+                    "localField": "collection",
+                    "foreignField": "_id",
+                    "as": "collection_data"
+                }
+            },
+            {
+                "$unwind": {
+                    "path": "$collection_data",
+                    "preserveNullAndEmptyArrays": True
+                }
+            },
+            {
+                "$lookup": {
+                    "from": "users",
+                    "localField": "students",
+                    "foreignField": "_id",
+                    "as": "students_data"
+                }
+            }
+        ]
+        classrooms = list(mongo.db.classrooms.aggregate(pipeline))
+        return [ClassroomModel(**classroom).to_dict() for classroom in classrooms]
+
+    @staticmethod
     def get_by_id(classroom_id):
         
         pipeline = [
@@ -150,7 +180,7 @@ class ClassroomModel:
             'created_at': self.created_at,
             'updated_at': self.updated_at,
             'teacher': str(self.teacher),
-            'students': [{'name': student['name'], 'email': student['email']} for student in self.students_data],
+            'students': [{'_id': str(student['_id']), 'name': student.get('name', ''), 'email': student.get('email', '')} for student in (self.students_data or [])],
             'guests': [guest for guest in self.guests],
             'collection': str(self.collection),
             'image':self.collection_data.get('image'),

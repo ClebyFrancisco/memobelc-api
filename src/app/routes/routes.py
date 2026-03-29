@@ -12,6 +12,7 @@ from src.app.controllers.notification_controller import notification_blueprint
 from src.app.controllers.user_streak_controller import user_streak_blueprint
 from src.app.controllers.books_controller import books_blueprint
 from src.app.controllers.invite_controller import invite_blueprint
+from src.app.controllers.course_controller import course_blueprint
 
 
 routes = Blueprint("main", __name__)
@@ -30,3 +31,4 @@ routes.register_blueprint(notification_blueprint, url_prefix="/notifications")
 routes.register_blueprint(user_streak_blueprint, url_prefix="/streak")
 routes.register_blueprint(books_blueprint, url_prefix="/books")
 routes.register_blueprint(invite_blueprint, url_prefix="/invite")
+routes.register_blueprint(course_blueprint, url_prefix="/course")
