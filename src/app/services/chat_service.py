@@ -54,7 +54,7 @@ class ChatService:
         )
 
     @staticmethod
-    def _transcribe_audio(audio_bytes, language_code):
+    def _transcribe_audio(audio_bytes, language_code, audio_mime=None):
         try:
             from google.cloud import speech
         except ImportError as exc:
@@ -65,13 +65,44 @@ class ChatService:
 
         client = speech.SpeechClient()
         audio = speech.RecognitionAudio(content=audio_bytes)
-        config = speech.RecognitionConfig(
-            language_code=language_code or Config.VOICE_LANGUAGE_CODE,
-            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=16000,
-            enable_automatic_punctuation=True,
-        )
-        response = client.recognize(config=config, audio=audio)
+        base_config = {
+            "language_code": language_code or Config.VOICE_LANGUAGE_CODE,
+            "enable_automatic_punctuation": True,
+        }
+
+        mime = (audio_mime or "").lower()
+        config_candidates = []
+
+        mime_config = dict(base_config)
+        if "webm" in mime:
+            mime_config["encoding"] = speech.RecognitionConfig.AudioEncoding.WEBM_OPUS
+        elif "ogg" in mime or "opus" in mime:
+            mime_config["encoding"] = speech.RecognitionConfig.AudioEncoding.OGG_OPUS
+        elif "wav" in mime or "pcm" in mime:
+            mime_config["encoding"] = speech.RecognitionConfig.AudioEncoding.LINEAR16
+            mime_config["sample_rate_hertz"] = 16000
+        elif "mp3" in mime or "mpeg" in mime:
+            mime_config["encoding"] = speech.RecognitionConfig.AudioEncoding.MP3
+
+        config_candidates.append(mime_config)
+        if mime_config != base_config:
+            # Fallback: let Google try to infer encoding when possible.
+            config_candidates.append(dict(base_config))
+
+        last_error = None
+        response = None
+        for candidate in config_candidates:
+            try:
+                config = speech.RecognitionConfig(**candidate)
+                response = client.recognize(config=config, audio=audio)
+                break
+            except Exception as exc:
+                last_error = exc
+                continue
+
+        if response is None:
+            raise RuntimeError(f"Speech recognition failed: {last_error}")
+
         transcript = " ".join(
             result.alternatives[0].transcript
             for result in response.results
@@ -133,10 +164,10 @@ class ChatService:
             return {"reply": reply, "chat_id": id}
 
     @staticmethod
-    def process_voice_turn(user_id, chat_id, history, settings, audio_base64):
+    def process_voice_turn(user_id, chat_id, history, settings, audio_base64, audio_mime=None):
         language_code = settings.get("language_conversation", Config.VOICE_LANGUAGE_CODE)
         audio_bytes = base64.b64decode(audio_base64)
-        transcript = ChatService._transcribe_audio(audio_bytes, language_code)
+        transcript = ChatService._transcribe_audio(audio_bytes, language_code, audio_mime=audio_mime)
 
         if not transcript:
             raise ValueError("Unable to transcribe user audio.")

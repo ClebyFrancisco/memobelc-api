@@ -65,6 +65,7 @@ def chat_realtime(ws):
         "settings": {"language_conversation": "en-US"},
         "history": [],
         "audio_chunks": [],
+        "audio_mime": "audio/webm",
     }
 
     try:
@@ -87,12 +88,15 @@ def chat_realtime(ws):
                 session_state["settings"] = body.get("settings", {"language_conversation": "en-US"})
                 session_state["history"] = body.get("history", [])
                 session_state["audio_chunks"] = []
+                session_state["audio_mime"] = body.get("mime_type", "audio/webm")
                 ws.send(json.dumps({"event": "session.started", "data": {"chat_id": session_state["chat_id"]}}))
 
             elif event == "audio.input.chunk":
                 chunk = body.get("chunk")
                 if chunk:
                     session_state["audio_chunks"].append(chunk)
+                if body.get("mime_type"):
+                    session_state["audio_mime"] = body.get("mime_type")
 
             elif event == "audio.input.commit":
                 if not current_user:
@@ -110,6 +114,7 @@ def chat_realtime(ws):
                     history=session_state["history"],
                     settings=session_state["settings"],
                     audio_base64=audio_base64,
+                    audio_mime=body.get("mime_type") or session_state["audio_mime"],
                 )
                 session_state["chat_id"] = turn_result["chat_id"]
                 session_state["history"].append({"role": "user", "parts": [{"text": turn_result["transcript"]}]})
@@ -146,4 +151,14 @@ def chat_realtime(ws):
             else:
                 ws.send(json.dumps({"event": "error", "data": {"message": f"Unknown event: {event}"}}))
     except Exception as e:
-        ws.send(json.dumps({"event": "error", "data": {"message": str(e)}}))
+        ws.send(
+            json.dumps(
+                {
+                    "event": "error",
+                    "data": {
+                        "message": str(e),
+                        "type": type(e).__name__,
+                    },
+                }
+            )
+        )
