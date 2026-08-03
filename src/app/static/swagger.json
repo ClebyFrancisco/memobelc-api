@@ -636,6 +636,17 @@
         "responses": { "200": { "description": "Cartas geradas" } }
       }
     },
+    "/chat/realtime": {
+      "get": {
+        "tags": ["Chat"],
+        "summary": "WebSocket de conversa por voz em tempo real",
+        "description": "Conecte via WebSocket em /chat/realtime e use eventos: session.start, audio.input.chunk, audio.input.commit, transcript.final, assistant.text, assistant.audio.chunk e session.end.",
+        "parameters": [],
+        "responses": {
+          "101": { "description": "Switching Protocols (WebSocket conectado)" }
+        }
+      }
+    },
     "/payment/payment_intent": {
       "post": {
         "tags": ["Payment"],

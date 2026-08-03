@@ -20,6 +20,10 @@ class Config:
     STRIPE_WHSEC = environ["STRIPE_WHSEC"]
     GENAI_API_KEY = environ["GENAI_API_KEY"]
     GENAI_MODEL = environ["GENAI_MODEL"]
+    GOOGLE_CLOUD_PROJECT = environ.get("GOOGLE_CLOUD_PROJECT", "")
+    VOICE_LANGUAGE_CODE = environ.get("VOICE_LANGUAGE_CODE", "en-US")
+    VOICE_NAME = environ.get("VOICE_NAME", "en-US-Neural2-C")
+    VOICE_AUDIO_ENCODING = environ.get("VOICE_AUDIO_ENCODING", "MP3")
 
     MAIL_SERVER = environ["MAIL_SERVER"]
     MAIL_PORT = environ["MAIL_PORT"]

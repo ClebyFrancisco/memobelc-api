@@ -11,11 +11,13 @@ from .routes.routes import routes
 from .config import Config
 from .services.notification_service import NotificationService
 from flask_cors import CORS
+from .extensions import sock
 
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+    sock.init_app(app)
 
     # CORS explícito para Swagger e API (evita "Failed to fetch" no /doc)
     CORS(

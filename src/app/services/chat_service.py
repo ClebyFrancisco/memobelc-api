@@ -5,6 +5,7 @@ import google.generativeai as genai
 from src.app.config import Config
 import json
 import re
+import base64
 
 
 genai.configure(api_key=Config.GENAI_API_KEY)
@@ -12,12 +13,9 @@ genai.configure(api_key=Config.GENAI_API_KEY)
 
 class ChatService:
     @staticmethod
-    def chat(user_id, id,  history, settings, message):
-
-        
-        conversation_language = settings.get("language_conversation", "en")  
+    def _build_system_prompt(settings):
+        conversation_language = settings.get("language_conversation", "en")
         explanation_language = settings.get("explanation_language", conversation_language)
-        
 
         pre_prompt_template = """
             You are a friendly and engaging language tutor in Memobelc, a spaced repetition language learning app. Your goal is to teach through short and dynamic conversations, which will be converted into flashcards.
@@ -50,11 +48,69 @@ class ChatService:
 
             Keep the conversation engaging and dynamic, making it feel like a natural learning experience.
             """
-
-        pre_prompt = pre_prompt_template.format(
+        return pre_prompt_template.format(
             conversation_language=conversation_language,
             explanation_language=explanation_language,
         )
+
+    @staticmethod
+    def _transcribe_audio(audio_bytes, language_code):
+        try:
+            from google.cloud import speech
+        except ImportError as exc:
+            raise RuntimeError(
+                "Google Speech-to-Text dependency not installed. "
+                "Install with: poetry add google-cloud-speech"
+            ) from exc
+
+        client = speech.SpeechClient()
+        audio = speech.RecognitionAudio(content=audio_bytes)
+        config = speech.RecognitionConfig(
+            language_code=language_code or Config.VOICE_LANGUAGE_CODE,
+            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+            sample_rate_hertz=16000,
+            enable_automatic_punctuation=True,
+        )
+        response = client.recognize(config=config, audio=audio)
+        transcript = " ".join(
+            result.alternatives[0].transcript
+            for result in response.results
+            if result.alternatives
+        ).strip()
+        return transcript
+
+    @staticmethod
+    def _synthesize_speech(text, language_code):
+        try:
+            from google.cloud import texttospeech
+        except ImportError as exc:
+            raise RuntimeError(
+                "Google Text-to-Speech dependency not installed. "
+                "Install with: poetry add google-cloud-texttospeech"
+            ) from exc
+
+        client = texttospeech.TextToSpeechClient()
+        synthesis_input = texttospeech.SynthesisInput(text=text)
+        voice = texttospeech.VoiceSelectionParams(
+            language_code=language_code or Config.VOICE_LANGUAGE_CODE,
+            name=Config.VOICE_NAME,
+        )
+        audio_encoding = getattr(
+            texttospeech.AudioEncoding,
+            Config.VOICE_AUDIO_ENCODING.upper(),
+            texttospeech.AudioEncoding.MP3,
+        )
+        audio_config = texttospeech.AudioConfig(audio_encoding=audio_encoding)
+        response = client.synthesize_speech(
+            input=synthesis_input,
+            voice=voice,
+            audio_config=audio_config,
+        )
+        return response.audio_content
+
+    @staticmethod
+    def chat(user_id, id,  history, settings, message):
+        pre_prompt = ChatService._build_system_prompt(settings)
 
 
         model = genai.GenerativeModel(Config.GENAI_MODEL, system_instruction=pre_prompt)
@@ -75,6 +131,48 @@ class ChatService:
             
 
             return {"reply": reply, "chat_id": id}
+
+    @staticmethod
+    def process_voice_turn(user_id, chat_id, history, settings, audio_base64):
+        language_code = settings.get("language_conversation", Config.VOICE_LANGUAGE_CODE)
+        audio_bytes = base64.b64decode(audio_base64)
+        transcript = ChatService._transcribe_audio(audio_bytes, language_code)
+
+        if not transcript:
+            raise ValueError("Unable to transcribe user audio.")
+
+        updated_history = [
+            *history,
+            {"role": "user", "parts": [{"text": transcript}]},
+        ]
+
+        chat_result = ChatService.chat(
+            user_id=user_id,
+            id=chat_id,
+            history=updated_history,
+            settings=settings,
+            message=transcript,
+        )
+        reply_text = chat_result.get("reply", "")
+
+        voice_audio = ChatService._synthesize_speech(reply_text, language_code)
+        voice_b64 = base64.b64encode(voice_audio).decode("utf-8")
+
+        if chat_result.get("chat_id"):
+            ChatModel.edit_chat(
+                chat_result["chat_id"],
+                {
+                    "updated_at": datetime.now(timezone.utc),
+                },
+            )
+
+        return {
+            "chat_id": chat_result.get("chat_id"),
+            "transcript": transcript,
+            "reply": reply_text,
+            "audio_base64": voice_b64,
+            "audio_mime": "audio/mpeg",
+        }
         
     @staticmethod
     def get_chats_by_user_id(user_id):
