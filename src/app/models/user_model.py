@@ -7,15 +7,52 @@ from datetime import datetime
 
 from src.app.models.push_notification_model import PushNotificationModel
 
+ALLOWED_ROLES = ("user", "teacher", "admin")
+
+
 class UserModel:
-    def __init__(self, _id=None, name = None, email=None, password=None, collections=None, customer_id=None, role='user', **kwargs):
+    def __init__(self, _id=None, name = None, email=None, password=None, collections=None, customer_id=None, role='user', roles=None, **kwargs):
         self._id = str(_id) if _id else None
         self.name = name
         self.email = email
         self.password = password
         self.collections = collections or []
         self.customer_id = customer_id
-        self.role = role
+        self.roles = UserModel.normalize_roles(role=role, roles=roles)
+        self.role = UserModel.primary_role(self.roles)
+
+    @staticmethod
+    def normalize_roles(role=None, roles=None):
+        """Normaliza role string legado e/ou lista roles para um array válido e único."""
+        result = []
+        if roles:
+            if isinstance(roles, str):
+                result.append(roles)
+            else:
+                result.extend(list(roles))
+        elif role:
+            result.append(role)
+
+        seen = []
+        for item in result:
+            if item in ALLOWED_ROLES and item not in seen:
+                seen.append(item)
+        return seen or ["user"]
+
+    @staticmethod
+    def primary_role(roles):
+        """Role primária para compatibilidade com o campo legado `role`."""
+        if "admin" in roles:
+            return "admin"
+        if "teacher" in roles:
+            return "teacher"
+        return "user"
+
+    def has_role(self, role):
+        return role in self.roles
+
+    def get_roles(self):
+        return list(self.roles)
 
 
     def save_to_db(self):
@@ -29,7 +66,8 @@ class UserModel:
             'is_confirmed': False,
             "collections": self.collections,
             "customer_id": customer.get('id'),
-            "role": self.role
+            "role": self.role,
+            "roles": self.roles,
         }
         
         
@@ -221,6 +259,45 @@ class UserModel:
 
 
 
+    @staticmethod
+    def list_users(search=None):
+        """Lista usuários para gestão admin (id, nome, email, roles)."""
+        query = {}
+        if search:
+            query = {
+                "$or": [
+                    {"name": {"$regex": search, "$options": "i"}},
+                    {"email": {"$regex": search, "$options": "i"}},
+                ]
+            }
+        cursor = mongo.db.users.find(query, {"name": 1, "email": 1, "role": 1, "roles": 1})
+        users = []
+        for user_data in cursor:
+            roles = UserModel.normalize_roles(
+                role=user_data.get("role"),
+                roles=user_data.get("roles"),
+            )
+            users.append({
+                "_id": str(user_data["_id"]),
+                "name": user_data.get("name"),
+                "email": user_data.get("email"),
+                "role": UserModel.primary_role(roles),
+                "roles": roles,
+            })
+        return users
+
+    @staticmethod
+    def update_roles(user_id, roles):
+        """Atualiza as roles de um usuário. Retorna o usuário atualizado ou None."""
+        normalized = UserModel.normalize_roles(roles=roles)
+        result = mongo.db.users.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {"roles": normalized, "role": UserModel.primary_role(normalized)}},
+        )
+        if result.matched_count == 0:
+            return None
+        return UserModel.find_by_id(user_id)
+
     def to_dict(self):
         """Converte o objeto UserModel para dicionário"""
         return {
@@ -229,5 +306,6 @@ class UserModel:
             'email': self.email,
             'collections': [str(ObjectId(collection_id)) for collection_id in self.collections],
             'customer_id':self.customer_id,
-            'role': self.role
+            'role': self.role,
+            'roles': self.roles,
         }

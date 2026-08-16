@@ -44,28 +44,34 @@ class CardModel:
     
     @staticmethod    
     def get_user_by_deck(deck_id):
-        collection_ids = mongo.db.collections.find(
-            { "decks": ObjectId(deck_id) },
-        )
+        collections = list(mongo.db.collections.find({"decks": ObjectId(deck_id)}))
+        collection_ids = [col["_id"] for col in collections]
+        if not collection_ids:
+            return []
 
-        collection_ids = [col['_id'] for col in collection_ids]
-        
         pipeline = [
-            {
-                "$match": {
-                    "collections": { "$in": collection_ids }
-                }
-            },
-            {
-                "$project": {
-                    "_id": 1 
-                }
-            }
+            {"$match": {"collections": {"$in": collection_ids}}},
+            {"$project": {"_id": 1}},
         ]
+        user_ids = [str(user["_id"]) for user in mongo.db.users.aggregate(pipeline)]
 
-        user_ids = list(mongo.db.users.aggregate(pipeline))
-        user_ids = [str(user['_id']) for user in user_ids]
-        return(user_ids)
+        from src.app.models.classroom_membership_model import ClassroomMembershipModel
+
+        allowed = []
+        for user_id in user_ids:
+            include = False
+            for col in collections:
+                if not col.get("classroom"):
+                    include = True
+                    break
+                if not ClassroomMembershipModel.user_left_classroom_collection(
+                    user_id, col["_id"]
+                ):
+                    include = True
+                    break
+            if include:
+                allowed.append(user_id)
+        return allowed
 
     def save_to_db(self):
         """Salva ou atualiza a carta no banco de dados MongoDB."""

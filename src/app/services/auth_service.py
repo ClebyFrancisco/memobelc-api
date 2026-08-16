@@ -80,7 +80,8 @@ class AuthService:
                     "name": user.name,
                     "email": user.email,
                     "user_id": str(user._id),
-                    "role": getattr(user, 'role', 'user') or 'user'
+                    "role": user.role,
+                    "roles": user.get_roles(),
                 }
             else:
                 return {"pending": ["User not confirmed!", str(token) if not isinstance(token, str) else token]}
@@ -124,7 +125,8 @@ class AuthService:
                     "name": user.name,
                     "email": user.email,
                     "user_id": str(user._id),
-                    "role": getattr(user, 'role', 'user') or 'user'
+                    "role": user.role,
+                    "roles": user.get_roles(),
                 }
 
         except jwt.ExpiredSignatureError:

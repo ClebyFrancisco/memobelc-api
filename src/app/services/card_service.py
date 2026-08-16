@@ -90,8 +90,9 @@ class CardService:
         Verifica se o usuário tem permissão para editar/excluir um card.
         Retorna um dict com: {"can_edit": bool, "reason": str}
         """
+        roles = user_role if isinstance(user_role, (list, tuple, set)) else [user_role]
         # Admin pode editar tudo
-        if user_role == "admin":
+        if "admin" in roles:
             return {"can_edit": True, "reason": "admin"}
         
         # Busca o card

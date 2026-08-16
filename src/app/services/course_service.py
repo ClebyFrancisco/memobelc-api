@@ -22,14 +22,40 @@ class CourseService:
     @staticmethod
     def get_courses_by_classroom(classroom_id):
         courses = CourseModel.get_by_classroom(classroom_id)
+        for course in courses:
+            course['has_content'] = CourseModel.has_visible_content(course['_id'])
         return {'courses': courses}
 
     @staticmethod
-    def get_course_detail(course_id, is_teacher=False):
+    def get_courses_for_user(user_id):
+        from src.app.services.classroom_service import ClassroomService
+
+        classrooms_result = ClassroomService.getClassrooms(user_id)
+        classrooms = classrooms_result.get('classrooms') or []
+        courses = []
+        for classroom in classrooms:
+            if classroom.get('user_role') != 'student':
+                continue
+            classroom_id = classroom.get('_id')
+            classroom_name = classroom.get('name') or ''
+            classroom_courses = CourseModel.get_by_classroom(classroom_id)
+            for course in classroom_courses:
+                if not CourseModel.has_visible_content(course['_id']):
+                    continue
+                course['classroom_id'] = classroom_id
+                course['classroom_name'] = classroom_name
+                course['has_content'] = True
+                courses.append(course)
+        return {'courses': courses}
+
+    @staticmethod
+    def get_course_detail(course_id, user_id=None, is_teacher=False):
         course = CourseModel.get_by_id(course_id)
         if not course:
             return None
-        # Teachers see all modules (including scheduled); students only see released ones
+        if user_id is not None:
+            is_teacher = str(course.get('teacher_id')) == str(user_id)
+        # Teachers of this course see all modules; students only see released ones
         modules = ModuleModel.get_by_course(course_id, include_hidden=is_teacher)
         for module in modules:
             # Once a module is visible, content follows its own individual settings.

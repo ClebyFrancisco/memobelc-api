@@ -103,7 +103,10 @@ class CardController:
     def check_card_permission(card_id):
         """Verifica se o usuário atual tem permissão para editar/excluir um card."""
         user_id = str(current_user._id)
-        user_role = getattr(current_user, "role", "user")
+        if hasattr(current_user, "get_roles"):
+            user_role = current_user.get_roles()
+        else:
+            user_role = getattr(current_user, "role", "user")
         
         result = CardService.check_card_permission(card_id, user_id, user_role)
         return jsonify(result), 200

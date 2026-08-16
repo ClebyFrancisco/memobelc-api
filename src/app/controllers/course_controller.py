@@ -12,7 +12,7 @@ class CourseController:
     @staticmethod
     @token_required
     def create_course(current_user, token):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can create courses'}), 403
 
         data = request.get_json() or {}
@@ -35,9 +35,16 @@ class CourseController:
 
     @staticmethod
     @token_required
+    def get_my_courses(current_user, token):
+        result = CourseService.get_courses_for_user(str(current_user._id))
+        return jsonify(result), 200
+
+    @staticmethod
+    @token_required
     def get_course_detail(current_user, token, course_id):
-        is_teacher = current_user.role == 'teacher'
-        course = CourseService.get_course_detail(course_id, is_teacher=is_teacher)
+        course = CourseService.get_course_detail(
+            course_id, user_id=str(current_user._id)
+        )
         if not course:
             return jsonify({'error': 'Course not found'}), 404
         return jsonify(course), 200
@@ -45,7 +52,7 @@ class CourseController:
     @staticmethod
     @token_required
     def update_course(current_user, token, course_id):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can update courses'}), 403
 
         data = request.get_json() or {}
@@ -57,7 +64,7 @@ class CourseController:
     @staticmethod
     @token_required
     def delete_course(current_user, token, course_id):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can delete courses'}), 403
 
         CourseService.delete_course(course_id)
@@ -68,7 +75,7 @@ class CourseController:
     @staticmethod
     @token_required
     def create_module(current_user, token):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can create modules'}), 403
 
         data = request.get_json() or {}
@@ -92,7 +99,7 @@ class CourseController:
     @staticmethod
     @token_required
     def update_module(current_user, token, module_id):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can update modules'}), 403
 
         data = request.get_json() or {}
@@ -103,7 +110,7 @@ class CourseController:
     @staticmethod
     @token_required
     def delete_module(current_user, token, module_id):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can delete modules'}), 403
 
         CourseService.delete_module(module_id)
@@ -112,7 +119,7 @@ class CourseController:
     @staticmethod
     @token_required
     def reorder_modules(current_user, token, course_id):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can reorder modules'}), 403
 
         data = request.get_json() or {}
@@ -127,7 +134,7 @@ class CourseController:
     @staticmethod
     @token_required
     def create_lesson(current_user, token):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can create lessons'}), 403
 
         data = request.get_json() or {}
@@ -165,7 +172,7 @@ class CourseController:
     @staticmethod
     @token_required
     def update_lesson(current_user, token, lesson_id):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can update lessons'}), 403
 
         data = request.get_json() or {}
@@ -177,7 +184,7 @@ class CourseController:
     @staticmethod
     @token_required
     def delete_lesson(current_user, token, lesson_id):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can delete lessons'}), 403
 
         CourseService.delete_lesson(lesson_id)
@@ -186,7 +193,7 @@ class CourseController:
     @staticmethod
     @token_required
     def reorder_lessons(current_user, token, module_id):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can reorder lessons'}), 403
 
         data = request.get_json() or {}
@@ -201,7 +208,7 @@ class CourseController:
     @staticmethod
     @token_required
     def create_activity(current_user, token):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can create activities'}), 403
 
         data = request.get_json() or {}
@@ -228,7 +235,7 @@ class CourseController:
     @staticmethod
     @token_required
     def get_activity(current_user, token, activity_id):
-        is_teacher = current_user.role == 'teacher'
+        is_teacher = current_user.has_role('teacher')
         activity = CourseService.get_activity_detail(activity_id, is_teacher=is_teacher)
         if not activity:
             return jsonify({'error': 'Activity not found'}), 404
@@ -237,7 +244,7 @@ class CourseController:
     @staticmethod
     @token_required
     def update_activity(current_user, token, activity_id):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can update activities'}), 403
 
         data = request.get_json() or {}
@@ -249,7 +256,7 @@ class CourseController:
     @staticmethod
     @token_required
     def delete_activity(current_user, token, activity_id):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can delete activities'}), 403
 
         CourseService.delete_activity(activity_id)
@@ -258,7 +265,7 @@ class CourseController:
     @staticmethod
     @token_required
     def reorder_activities(current_user, token, module_id):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can reorder activities'}), 403
 
         data = request.get_json() or {}
@@ -273,7 +280,7 @@ class CourseController:
     @staticmethod
     @token_required
     def create_question(current_user, token):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can create questions'}), 403
 
         data = request.get_json() or {}
@@ -294,7 +301,7 @@ class CourseController:
     @staticmethod
     @token_required
     def update_question(current_user, token, question_id):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can update questions'}), 403
 
         data = request.get_json() or {}
@@ -306,7 +313,7 @@ class CourseController:
     @staticmethod
     @token_required
     def delete_question(current_user, token, question_id):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can delete questions'}), 403
 
         CourseService.delete_question(question_id)
@@ -323,7 +330,7 @@ class CourseController:
     @staticmethod
     @token_required
     def get_students_progress(current_user, token, course_id):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can view student progress'}), 403
         result = CourseService.get_students_progress(course_id)
         return jsonify(result), 200
@@ -333,7 +340,7 @@ class CourseController:
     @staticmethod
     @token_required
     def get_student_answer_for_teacher(current_user, token, activity_id, student_id):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can view student answers'}), 403
         result = CourseService.get_student_answer_for_teacher(activity_id, student_id)
         return jsonify(result), 200
@@ -341,7 +348,7 @@ class CourseController:
     @staticmethod
     @token_required
     def set_student_approved(current_user, token, activity_id, student_id):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can approve answers'}), 403
         data = request.get_json() or {}
         approved = bool(data.get('approved', True))
@@ -351,7 +358,7 @@ class CourseController:
     @staticmethod
     @token_required
     def reset_student_answer(current_user, token, activity_id, student_id):
-        if current_user.role != 'teacher':
+        if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can reset answers'}), 403
         CourseService.reset_student_answer(activity_id, student_id)
         return jsonify({'reset': True}), 200
@@ -386,6 +393,7 @@ course_blueprint = Blueprint('course_blueprint', __name__)
 
 # Courses
 course_blueprint.route('/create', methods=['POST'])(CourseController.create_course)
+course_blueprint.route('/mine', methods=['GET'])(CourseController.get_my_courses)
 course_blueprint.route('/by_classroom/<classroom_id>', methods=['GET'])(CourseController.get_courses_by_classroom)
 course_blueprint.route('/<course_id>', methods=['GET'])(CourseController.get_course_detail)
 course_blueprint.route('/<course_id>', methods=['PUT'])(CourseController.update_course)

@@ -237,4 +237,15 @@ class ClassroomService:
         
         return {}
 
+    @staticmethod
+    def remove_user(classroom_id, user_id=None, email=None):
+        if user_id:
+            ClassroomModel.remove_student(classroom_id, user_id)
+            user = UserModel.find_by_id(user_id)
+            if user and getattr(user, "email", None):
+                ClassroomModel.remove_user_guest(classroom_id, user.email)
+        if email:
+            ClassroomModel.remove_user_guest(classroom_id, email)
+        return {}
+
         

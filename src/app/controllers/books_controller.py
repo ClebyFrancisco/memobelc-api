@@ -15,7 +15,7 @@ class BookController:
     @token_required
     def create_book(current_user, token):
         """Cria um novo livro (apenas admin)."""
-        if current_user.role != "admin":
+        if not current_user.has_role("admin"):
             return jsonify({"error": "Unauthorized"}), 403
 
         data = request.get_json()
@@ -36,7 +36,7 @@ class BookController:
     @token_required
     def update_book(current_user, token, book_id):
         """Atualiza um livro (apenas admin)."""
-        if current_user.role != "admin":
+        if not current_user.has_role("admin"):
             return jsonify({"error": "Unauthorized"}), 403
 
         data = request.get_json()
@@ -50,7 +50,7 @@ class BookController:
     @token_required
     def delete_book(current_user, token, book_id):
         """Deleta um livro (apenas admin)."""
-        if current_user.role != "admin":
+        if not current_user.has_role("admin"):
             return jsonify({"error": "Unauthorized"}), 403
 
         deleted = BookService.delete_book(book_id)
@@ -63,7 +63,7 @@ class BookController:
     @token_required
     def get_all_books(current_user, token):
         """Retorna todos os livros (apenas admin para ver tudo)."""
-        if current_user.role != "admin":
+        if not current_user.has_role("admin"):
             return jsonify({"error": "Unauthorized"}), 403
 
         books = BookService.get_all_books()
@@ -128,7 +128,7 @@ class BookController:
     @token_required
     def admin_get_book_with_users(current_user, token, book_id):
         """Retorna detalhes do livro e lista de usuários com informação se possuem o livro (apenas admin)."""
-        if current_user.role != "admin":
+        if not current_user.has_role("admin"):
             return jsonify({"error": "Unauthorized"}), 403
 
         book = BookService.get_book_by_id(book_id)
@@ -167,7 +167,7 @@ class BookController:
     @token_required
     def admin_assign_book_to_user(current_user, token):
         """Atribui um livro a um usuário específico (apenas admin)."""
-        if current_user.role != "admin":
+        if not current_user.has_role("admin"):
             return jsonify({"error": "Unauthorized"}), 403
 
         data = request.get_json()
@@ -184,7 +184,7 @@ class BookController:
     @token_required
     def admin_generate_collection(current_user, token, book_id):
         """Gera collection e decks para livro que ainda não tem collection_id (apenas admin)."""
-        if current_user.role != "admin":
+        if not current_user.has_role("admin"):
             return jsonify({"error": "Unauthorized"}), 403
 
         result = BookService.generate_collection_for_book(book_id)
@@ -198,7 +198,7 @@ class BookController:
     @token_required
     def admin_add_chapter(current_user, token):
         """Adiciona um capítulo ao livro (apenas admin). Cria um deck na collection do livro."""
-        if current_user.role != "admin":
+        if not current_user.has_role("admin"):
             return jsonify({"error": "Unauthorized"}), 403
 
         data = request.get_json()
@@ -216,7 +216,7 @@ class BookController:
     @token_required
     def admin_add_cards_to_chapter(current_user, token):
         """Adiciona cartas ao deck de um capítulo (apenas admin)."""
-        if current_user.role != "admin":
+        if not current_user.has_role("admin"):
             return jsonify({"error": "Unauthorized"}), 403
 
         data = request.get_json()

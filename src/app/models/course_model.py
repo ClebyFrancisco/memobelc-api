@@ -46,6 +46,37 @@ class CourseModel:
         return None
 
     @staticmethod
+    def has_visible_content(course_id):
+        now = datetime.now(timezone.utc)
+        released_modules = list(
+            mongo.db.course_modules.find(
+                {
+                    'course_id': ObjectId(course_id),
+                    '$or': [
+                        {'scheduled_at': None},
+                        {'scheduled_at': {'$lte': now}},
+                    ],
+                },
+                {'_id': 1},
+            )
+        )
+        module_ids = [module['_id'] for module in released_modules]
+        if not module_ids:
+            return False
+        visible_filter = {
+            'module_id': {'$in': module_ids},
+            'visible': True,
+            '$or': [
+                {'scheduled_at': None},
+                {'scheduled_at': {'$lte': now}},
+            ],
+        }
+        return (
+            mongo.db.lessons.find_one(visible_filter) is not None
+            or mongo.db.activities.find_one(visible_filter) is not None
+        )
+
+    @staticmethod
     def get_by_classroom(classroom_id):
         docs = list(
             mongo.db.courses

@@ -5,6 +5,7 @@ from src.app import mongo
 from .user_model import UserModel
 from .user_progress_model import UserProgressModel
 from .deck_model import DeckModel
+from .classroom_membership_model import ClassroomMembershipModel
 
 
 class ClassroomModel:
@@ -149,6 +150,9 @@ class ClassroomModel:
         )
         
         UserModel.add_collections_to_user(user_id, [classroom.get('collection')])
+        ClassroomMembershipModel.mark_joined(
+            classroom_id, user_id, classroom.get('collection')
+        )
         
         
         for item in classroom.get('decks'):
@@ -171,6 +175,25 @@ class ClassroomModel:
             {"_id": ObjectId(classroom_id)},
             { "$pull": { "guests": email } }
         )
+
+    @staticmethod
+    def remove_student(classroom_id, user_id):
+        classroom = ClassroomModel.get_by_id(classroom_id)
+        decks_snapshot = []
+        collection_id = None
+        if classroom:
+            collection_id = classroom.get('collection')
+            for deck_id in classroom.get('decks') or []:
+                deck = DeckModel.get_by_id(deck_id)
+                if deck:
+                    decks_snapshot.append(deck)
+        ClassroomMembershipModel.freeze_on_leave(
+            classroom_id, user_id, collection_id, decks_snapshot
+        )
+        mongo.db.classrooms.update_one(
+            {"_id": ObjectId(classroom_id)},
+            {"$pull": {"students": ObjectId(user_id)}},
+        )
         
     def to_dict(self):
         """Converte um documento classroom para dicionário"""
@@ -183,6 +206,6 @@ class ClassroomModel:
             'students': [{'_id': str(student['_id']), 'name': student.get('name', ''), 'email': student.get('email', '')} for student in (self.students_data or [])],
             'guests': [guest for guest in self.guests],
             'collection': str(self.collection),
-            'image':self.collection_data.get('image'),
-            'decks': [str(item) for item in self.collection_data.get('decks')]
+            'image': (self.collection_data or {}).get('image'),
+            'decks': [str(item) for item in (self.collection_data or {}).get('decks') or []],
         }

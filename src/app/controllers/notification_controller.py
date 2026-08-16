@@ -61,7 +61,7 @@ class NotificationController:
     @token_required
     def send_daily(current_user, token):
         """Permite disparar manualmente as notificações diárias (restrito a admin)."""
-        if current_user.role != "admin":
+        if not current_user.has_role("admin"):
             raise Unauthorized(description="User Invalid!")
 
         result = NotificationService.send_daily_study_notifications()
@@ -71,7 +71,7 @@ class NotificationController:
     @token_required
     def teacher_custom(current_user, token):
         """Professor envia notificação livre para uma turma."""
-        if current_user.role != "teacher":
+        if not current_user.has_role("teacher"):
             raise Unauthorized(description="User Invalid!")
 
         data = request.get_json() or {}
@@ -94,7 +94,7 @@ class NotificationController:
     @token_required
     def admin_custom(current_user, token):
         """Admin envia notificação livre para um ou mais usuários (ou para todos se não passar lista)."""
-        if current_user.role != "admin":
+        if not current_user.has_role("admin"):
             raise Unauthorized(description="User Invalid!")
 
         data = request.get_json() or {}

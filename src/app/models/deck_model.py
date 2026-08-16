@@ -17,6 +17,7 @@ class DeckModel:
         collection_id=None,
         image=None,
         cards=None,
+        **kwargs,
     ):
         self.id = str(_id) if _id else None
         self.name = name
@@ -79,15 +80,38 @@ class DeckModel:
     def get_decks_by_collection_id(collection_id, user_id):
         """ "Busca todos os decks do user e retorna a quantidade de cartas totais e pendentes."""
         collection = CollectionModel.get_by_id(collection_id)
+        if not collection:
+            return {"decks": []}
+
+        from .classroom_membership_model import ClassroomMembershipModel
+        freeze = None
+        if collection.get("classroom") and user_id:
+            freeze = ClassroomMembershipModel.get_freeze_for_collection(
+                user_id, collection.get("_id")
+            )
 
         decks_list = []
 
         for deck_id in collection.get("decks", []):
+            deck_id_str = str(deck_id)
+            if freeze and deck_id_str not in freeze["allowed_decks"]:
+                continue
             deck = DeckModel.get_by_id(deck_id)
+            if not deck:
+                continue
+            if freeze:
+                allowed_cards = set(freeze["allowed_cards"].get(deck_id_str) or [])
+                deck["cards"] = [
+                    card_id for card_id in deck.get("cards", []) if str(card_id) in allowed_cards
+                ]
 
-            pending_count = UserProgressModel.count_pending_cards(
-                user_id, deck.get("_id") or deck.get("id")
-            )
+            allowed_ids = set(str(card_id) for card_id in deck.get("cards", [])) if freeze else None
+            review_cards = UserProgressModel.get_pending_cards(user_id, deck.get("_id") or deck.get("id"))
+            if allowed_ids is not None:
+                review_cards = [
+                    card for card in review_cards if str(card.get("card_id")) in allowed_ids
+                ]
+            pending_count = len(review_cards)
 
             deck.update(
                 {
