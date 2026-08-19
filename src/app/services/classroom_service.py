@@ -70,6 +70,8 @@ class ClassroomService:
         total_activities_all = 0
         total_activities_submitted = 0
         all_scores = []
+        total_xp = 0
+        has_perfect = False
         courses_data = []
 
         for course in courses_raw:
@@ -87,6 +89,7 @@ class ClassroomService:
             course_activities_submitted = 0
             course_activities_total = 0
             course_scores = []
+            course_xp = 0
             modules_data = []
 
             for module in modules:
@@ -127,17 +130,29 @@ class ClassroomService:
                     course_activities_total += 1
                     if answer_doc:
                         course_activities_submitted += 1
-                        if answer_doc.get('score') is not None:
+                        mode = activity.get('feedback_mode') or 'immediate'
+                        released = mode == 'immediate' or answer_doc.get('approved')
+                        if released and answer_doc.get('score') is not None:
                             course_scores.append(answer_doc['score'])
+                            if answer_doc['score'] >= 100:
+                                has_perfect = True
+                        if released:
+                            course_xp += answer_doc.get('earned_points') or 0
                     submitted_at = None
                     if answer_doc and answer_doc.get('submitted_at'):
                         ts = answer_doc['submitted_at']
                         submitted_at = ts.isoformat() if hasattr(ts, 'isoformat') else str(ts)
+                    mode = activity.get('feedback_mode') or 'immediate'
+                    released = bool(
+                        answer_doc and (
+                            mode == 'immediate' or answer_doc.get('approved')
+                        )
+                    )
                     activities_data.append({
                         '_id': str(activity['_id']),
                         'title': activity.get('title', ''),
                         'submitted': answer_doc is not None,
-                        'score': answer_doc.get('score') if answer_doc else None,
+                        'score': answer_doc.get('score') if released else None,
                         'submitted_at': submitted_at,
                         'approved': answer_doc.get('approved', False) if answer_doc else False,
                     })
@@ -155,6 +170,8 @@ class ClassroomService:
             total_activities_submitted += course_activities_submitted
             all_scores.extend(course_scores)
 
+            total_xp += course_xp
+
             avg_score = round(sum(course_scores) / len(course_scores), 1) if course_scores else None
             total_items = course_lessons_total + course_activities_total
             done_items = course_lessons_viewed + course_activities_submitted
@@ -169,6 +186,7 @@ class ClassroomService:
                 'activities_submitted': course_activities_submitted,
                 'total_activities': course_activities_total,
                 'avg_score': avg_score,
+                'xp': int(round(course_xp)),
                 'progress_pct': progress_pct,
                 'modules': modules_data,
             })
@@ -192,6 +210,16 @@ class ClassroomService:
         if user.get('created_at'):
             ts = user['created_at']
             member_since = ts.isoformat() if hasattr(ts, 'isoformat') else str(ts)
+
+        badges = []
+        if total_activities_submitted >= 1:
+            badges.append('first_step')
+        if has_perfect:
+            badges.append('perfect')
+        if top_performer:
+            badges.append('top_performer')
+        if at_risk:
+            badges.append('at_risk')
 
         return {
             'student': {
@@ -217,6 +245,8 @@ class ClassroomService:
                 'cards_reviewed': cards_reviewed,
                 'at_risk': at_risk,
                 'top_performer': top_performer,
+                'xp': int(round(total_xp)),
+                'badges': badges,
             },
             'courses': courses_data,
         }

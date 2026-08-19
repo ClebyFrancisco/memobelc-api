@@ -229,14 +229,16 @@ class CourseController:
             course_id=data['course_id'],
             visible=data.get('visible', True),
             scheduled_at=scheduled_at,
+            feedback_mode=data.get('feedback_mode', 'immediate'),
         )
         return jsonify(result), 201
 
     @staticmethod
     @token_required
     def get_activity(current_user, token, activity_id):
-        is_teacher = current_user.has_role('teacher')
-        activity = CourseService.get_activity_detail(activity_id, is_teacher=is_teacher)
+        activity = CourseService.get_activity_detail(
+            activity_id, user_id=str(current_user._id)
+        )
         if not activity:
             return jsonify({'error': 'Activity not found'}), 404
         return jsonify(activity), 200
@@ -248,7 +250,7 @@ class CourseController:
             return jsonify({'error': 'Only teachers can update activities'}), 403
 
         data = request.get_json() or {}
-        allowed = ['title', 'description', 'visible', 'scheduled_at']
+        allowed = ['title', 'description', 'visible', 'scheduled_at', 'feedback_mode']
         update_data = {k: v for k, v in data.items() if k in allowed}
         result = CourseService.update_activity(activity_id, update_data)
         return jsonify(result), 200
@@ -287,15 +289,18 @@ class CourseController:
         if 'text' not in data or 'type' not in data or 'activity_id' not in data:
             return jsonify({'error': 'text, type and activity_id are required'}), 400
 
-        result = CourseService.create_question(
-            text=data['text'],
-            q_type=data['type'],
-            options=data.get('options', []),
-            correct_answer=data.get('correct_answer'),
-            show_answer=data.get('show_answer', True),
-            points=data.get('points', 1),
-            activity_id=data['activity_id'],
-        )
+        try:
+            result = CourseService.create_question(
+                text=data['text'],
+                q_type=data['type'],
+                options=data.get('options', []),
+                correct_answer=data.get('correct_answer'),
+                show_answer=data.get('show_answer'),
+                points=data.get('points', 1),
+                activity_id=data['activity_id'],
+            )
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
         return jsonify(result), 201
 
     @staticmethod
@@ -307,7 +312,10 @@ class CourseController:
         data = request.get_json() or {}
         allowed = ['text', 'type', 'options', 'correct_answer', 'show_answer', 'points']
         update_data = {k: v for k, v in data.items() if k in allowed}
-        result = CourseService.update_question(question_id, update_data)
+        try:
+            result = CourseService.update_question(question_id, update_data)
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
         return jsonify(result), 200
 
     @staticmethod
@@ -318,6 +326,19 @@ class CourseController:
 
         CourseService.delete_question(question_id)
         return jsonify({'message': 'Question deleted'}), 200
+
+    @staticmethod
+    @token_required
+    def reorder_questions(current_user, token, activity_id):
+        if not current_user.has_role('teacher'):
+            return jsonify({'error': 'Only teachers can reorder questions'}), 403
+
+        data = request.get_json() or {}
+        if 'question_ids' not in data:
+            return jsonify({'error': 'question_ids is required'}), 400
+
+        CourseService.reorder_questions(activity_id, data['question_ids'])
+        return jsonify({'message': 'Questions reordered'}), 200
 
     # ── Lesson Views ─────────────────────────────────────────────────────────
 
@@ -357,6 +378,14 @@ class CourseController:
 
     @staticmethod
     @token_required
+    def approve_all_answers(current_user, token, activity_id):
+        if not current_user.has_role('teacher'):
+            return jsonify({'error': 'Only teachers can approve answers'}), 403
+        result = CourseService.approve_all_answers(activity_id)
+        return jsonify(result), 200
+
+    @staticmethod
+    @token_required
     def reset_student_answer(current_user, token, activity_id, student_id):
         if not current_user.has_role('teacher'):
             return jsonify({'error': 'Only teachers can reset answers'}), 403
@@ -372,11 +401,14 @@ class CourseController:
         if 'answers' not in data:
             return jsonify({'error': 'answers is required'}), 400
 
-        result = CourseService.submit_answers(
-            student_id=str(current_user._id),
-            activity_id=activity_id,
-            answers=data['answers'],
-        )
+        try:
+            result = CourseService.submit_answers(
+                student_id=str(current_user._id),
+                activity_id=activity_id,
+                answers=data['answers'],
+            )
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
         return jsonify(result), 200
 
     @staticmethod
@@ -387,6 +419,16 @@ class CourseController:
             activity_id=activity_id,
         )
         return jsonify({'answer': result}), 200
+
+    @staticmethod
+    @token_required
+    def get_course_ranking(current_user, token, course_id):
+        result = CourseService.get_course_ranking(
+            course_id, user_id=str(current_user._id)
+        )
+        if not result:
+            return jsonify({'error': 'Course not found'}), 404
+        return jsonify(result), 200
 
 
 course_blueprint = Blueprint('course_blueprint', __name__)
@@ -423,10 +465,12 @@ course_blueprint.route('/module/<module_id>/activities/reorder', methods=['PUT']
 course_blueprint.route('/question/create', methods=['POST'])(CourseController.create_question)
 course_blueprint.route('/question/<question_id>', methods=['PUT'])(CourseController.update_question)
 course_blueprint.route('/question/<question_id>', methods=['DELETE'])(CourseController.delete_question)
+course_blueprint.route('/activity/<activity_id>/questions/reorder', methods=['PUT'])(CourseController.reorder_questions)
 
 # Teacher answer management
 course_blueprint.route('/activity/<activity_id>/answer/<student_id>', methods=['GET'])(CourseController.get_student_answer_for_teacher)
 course_blueprint.route('/activity/<activity_id>/answer/<student_id>/approve', methods=['POST'])(CourseController.set_student_approved)
+course_blueprint.route('/activity/<activity_id>/approve_all', methods=['POST'])(CourseController.approve_all_answers)
 course_blueprint.route('/activity/<activity_id>/answer/<student_id>/reset', methods=['DELETE'])(CourseController.reset_student_answer)
 
 # Student Answers
@@ -436,3 +480,4 @@ course_blueprint.route('/activity/<activity_id>/my_answer', methods=['GET'])(Cou
 # Lesson Views & Student Progress
 course_blueprint.route('/lesson/<lesson_id>/viewed', methods=['POST'])(CourseController.mark_lesson_viewed)
 course_blueprint.route('/<course_id>/students_progress', methods=['GET'])(CourseController.get_students_progress)
+course_blueprint.route('/<course_id>/ranking', methods=['GET'])(CourseController.get_course_ranking)

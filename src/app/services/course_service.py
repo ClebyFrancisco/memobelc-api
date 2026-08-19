@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from src.app.models.course_model import (
     CourseModel, ModuleModel, LessonModel, ActivityModel,
     QuestionModel, StudentAnswerModel, LessonViewModel,
+    count_blanks,
 )
 
 
@@ -166,7 +167,10 @@ class CourseService:
     # ── Activities ────────────────────────────────────────────────────────────
 
     @staticmethod
-    def create_activity(title, description, module_id, course_id, visible, scheduled_at):
+    def create_activity(title, description, module_id, course_id, visible, scheduled_at,
+                        feedback_mode='immediate'):
+        if feedback_mode not in ActivityModel.FEEDBACK_MODES:
+            feedback_mode = 'immediate'
         activity = ActivityModel(
             title=title,
             description=description,
@@ -174,28 +178,59 @@ class CourseService:
             course_id=course_id,
             visible=visible,
             scheduled_at=scheduled_at,
+            feedback_mode=feedback_mode,
         )
         return activity.save_to_db()
 
     @staticmethod
-    def get_activity_detail(activity_id, is_teacher=False):
+    def is_course_teacher(course_id, user_id):
+        if not course_id or not user_id:
+            return False
+        course = CourseModel.get_by_id(course_id)
+        return bool(course and str(course.get('teacher_id')) == str(user_id))
+
+    @staticmethod
+    def can_see_feedback(activity, answer_doc):
+        if not answer_doc:
+            return False
+        mode = activity.get('feedback_mode') or 'immediate'
+        if mode == 'immediate':
+            return True
+        return bool(answer_doc.get('approved'))
+
+    @staticmethod
+    def get_activity_detail(activity_id, user_id=None, is_teacher=False):
         activity = ActivityModel.get_by_id(activity_id)
         if not activity:
             return None
+        if user_id is not None:
+            is_teacher = CourseService.is_course_teacher(activity.get('course_id'), user_id)
+
+        answer_doc = None
+        if user_id and not is_teacher:
+            answer_doc = StudentAnswerModel.get_by_student_and_activity(user_id, activity_id)
+
+        include_answers = is_teacher or CourseService.can_see_feedback(activity, answer_doc)
         activity['questions'] = QuestionModel.get_by_activity(
-            activity_id, for_student=not is_teacher
+            activity_id, for_student=not include_answers
         )
         return activity
 
     @staticmethod
     def update_activity(activity_id, update_data):
-        if update_data.get('scheduled_at'):
-            try:
-                update_data['scheduled_at'] = datetime.fromisoformat(
-                    update_data['scheduled_at']
-                )
-            except (ValueError, TypeError):
-                update_data.pop('scheduled_at', None)
+        if 'scheduled_at' in update_data:
+            if update_data['scheduled_at']:
+                try:
+                    update_data['scheduled_at'] = datetime.fromisoformat(
+                        update_data['scheduled_at']
+                    )
+                except (ValueError, TypeError):
+                    update_data.pop('scheduled_at', None)
+            else:
+                update_data['scheduled_at'] = None
+        if 'feedback_mode' in update_data:
+            if update_data['feedback_mode'] not in ActivityModel.FEEDBACK_MODES:
+                update_data['feedback_mode'] = 'immediate'
         ActivityModel.update(activity_id, update_data)
         return ActivityModel.get_by_id(activity_id)
 
@@ -214,27 +249,126 @@ class CourseService:
     # ── Questions ─────────────────────────────────────────────────────────────
 
     @staticmethod
+    def validate_question_payload(text, q_type, options, correct_answer, points):
+        if not text or not str(text).strip():
+            raise ValueError('Question text is required')
+        if q_type not in QuestionModel.VALID_TYPES:
+            raise ValueError('Invalid question type')
+        try:
+            points = int(points)
+        except (TypeError, ValueError):
+            raise ValueError('Points must be an integer >= 1')
+        if points < 1:
+            raise ValueError('Points must be an integer >= 1')
+
+        options = [str(o).strip() for o in (options or []) if str(o).strip()]
+        text = str(text).strip()
+
+        if q_type in ('multiple_choice', 'checkbox', 'dropdown'):
+            if len(options) < 2:
+                raise ValueError('At least 2 options are required')
+            if q_type == 'checkbox':
+                if not isinstance(correct_answer, list) or not correct_answer:
+                    raise ValueError('At least one correct option is required')
+                correct_answer = [str(c).strip() for c in correct_answer if str(c).strip()]
+                if not correct_answer:
+                    raise ValueError('At least one correct option is required')
+                if not all(c in options for c in correct_answer):
+                    raise ValueError('Correct answers must match the options')
+            else:
+                if correct_answer is None or str(correct_answer).strip() == '':
+                    raise ValueError('A correct answer is required')
+                correct_answer = str(correct_answer).strip()
+                if correct_answer not in options:
+                    raise ValueError('Correct answer must match one of the options')
+
+        elif q_type == 'short_answer':
+            if correct_answer is None or not str(correct_answer).strip():
+                raise ValueError('Expected answer is required')
+            correct_answer = str(correct_answer).strip()
+            options = []
+
+        elif q_type == 'fill_in_blank':
+            n_blanks = count_blanks(text)
+            if n_blanks < 1:
+                raise ValueError('Fill in the blank questions must contain at least one ___')
+            if isinstance(correct_answer, str):
+                correct_answer = [correct_answer] if correct_answer.strip() else []
+            if not isinstance(correct_answer, list):
+                raise ValueError('Each blank must have an expected answer')
+            answers = [str(a).strip() for a in correct_answer]
+            if len(answers) != n_blanks or any(not a for a in answers):
+                raise ValueError('Each blank must have an expected answer')
+            correct_answer = answers
+            options = []
+
+        elif q_type == 'paragraph':
+            options = []
+            if correct_answer is not None:
+                correct_answer = str(correct_answer).strip() or None
+
+        return {
+            'text': text,
+            'type': q_type,
+            'options': options,
+            'correct_answer': correct_answer,
+            'points': points,
+        }
+
+    @staticmethod
     def create_question(text, q_type, options, correct_answer,
                         show_answer, points, activity_id):
+        validated = CourseService.validate_question_payload(
+            text, q_type, options, correct_answer, points
+        )
+        activity = ActivityModel.get_by_id(activity_id)
+        mode = (activity or {}).get('feedback_mode') or 'immediate'
+        if show_answer is None:
+            show_answer = mode == 'immediate'
         question = QuestionModel(
-            text=text,
-            type=q_type,
-            options=options,
-            correct_answer=correct_answer,
+            text=validated['text'],
+            type=validated['type'],
+            options=validated['options'],
+            correct_answer=validated['correct_answer'],
             show_answer=show_answer,
-            points=points,
+            points=validated['points'],
             activity_id=activity_id,
         )
         return question.save_to_db()
 
     @staticmethod
     def update_question(question_id, update_data):
-        QuestionModel.update(question_id, update_data)
+        existing = QuestionModel.get_by_id(question_id)
+        if not existing:
+            raise ValueError('Question not found')
+        merged_type = update_data.get('type', existing.get('type'))
+        merged_text = update_data.get('text', existing.get('text'))
+        merged_options = update_data.get('options', existing.get('options'))
+        merged_correct = update_data.get('correct_answer', existing.get('correct_answer'))
+        merged_points = update_data.get('points', existing.get('points', 1))
+        validated = CourseService.validate_question_payload(
+            merged_text, merged_type, merged_options, merged_correct, merged_points
+        )
+        payload = {
+            'text': validated['text'],
+            'type': validated['type'],
+            'options': validated['options'],
+            'correct_answer': validated['correct_answer'],
+            'points': validated['points'],
+        }
+        if 'show_answer' in update_data:
+            payload['show_answer'] = bool(update_data['show_answer'])
+        QuestionModel.update(question_id, payload)
         return QuestionModel.get_by_id(question_id)
 
     @staticmethod
     def delete_question(question_id):
         QuestionModel.delete(question_id)
+        return {}
+
+    @staticmethod
+    def reorder_questions(activity_id, question_ids):
+        QuestionModel.reorder(activity_id, question_ids)
         return {}
 
     # ── Lesson Views ─────────────────────────────────────────────────────────
@@ -333,6 +467,7 @@ class CourseService:
                 activities_data.append({
                     '_id': activity['_id'],
                     'title': activity['title'],
+                    'feedback_mode': activity.get('feedback_mode') or 'immediate',
                     'submission_count': len(raw_answers),
                     'submissions': submissions_enriched,
                     'not_submitted': not_submitted,
@@ -430,6 +565,11 @@ class CourseService:
         return {'approved': approved}
 
     @staticmethod
+    def approve_all_answers(activity_id):
+        StudentAnswerModel.approve_all(activity_id)
+        return {'approved': True}
+
+    @staticmethod
     def reset_student_answer(activity_id, student_id):
         StudentAnswerModel.reset_by_student(activity_id, student_id)
         return {}
@@ -437,11 +577,69 @@ class CourseService:
     # ── Student Answers ───────────────────────────────────────────────────────
 
     @staticmethod
+    def _answers_equal(student_ans, correct):
+        if correct is None:
+            return False
+        return str(student_ans).strip().lower() == str(correct).strip().lower()
+
+    @staticmethod
+    def _score_question(question, student_ans):
+        q_type = question.get('type')
+        correct = question.get('correct_answer')
+        points = question.get('points', 1) or 1
+
+        if q_type in ('multiple_choice', 'dropdown', 'short_answer'):
+            if CourseService._answers_equal(student_ans, correct):
+                return points
+            return 0
+
+        if q_type == 'fill_in_blank':
+            expected = correct if isinstance(correct, list) else (
+                [correct] if correct is not None and str(correct).strip() else []
+            )
+            if not expected:
+                return 0
+            given = student_ans if isinstance(student_ans, list) else (
+                [student_ans] if student_ans is not None else []
+            )
+            hits = 0
+            for i, expected_val in enumerate(expected):
+                student_val = given[i] if i < len(given) else ''
+                if CourseService._answers_equal(student_val, expected_val):
+                    hits += 1
+            return round(points * hits / len(expected), 2)
+
+        if q_type == 'checkbox':
+            if isinstance(correct, list) and isinstance(student_ans, list):
+                if set(str(x) for x in student_ans) == set(str(x) for x in correct):
+                    return points
+            return 0
+
+        return 0
+
+    @staticmethod
+    def _redact_answer(activity, answer_doc):
+        if not answer_doc:
+            return None
+        if CourseService.can_see_feedback(activity, answer_doc):
+            return answer_doc
+        redacted = dict(answer_doc)
+        redacted['score'] = None
+        redacted['earned_points'] = None
+        redacted['total_points'] = None
+        redacted['feedback_pending'] = True
+        return redacted
+
+    @staticmethod
     def submit_answers(student_id, activity_id, answers):
+        activity = ActivityModel.get_by_id(activity_id)
+        if not activity:
+            raise ValueError('Activity not found')
+
         questions = QuestionModel.get_by_activity(activity_id, for_student=False)
         question_map = {q['_id']: q for q in questions}
 
-        total_points = sum(q.get('points', 1) for q in questions)
+        total_points = sum(q.get('points', 1) or 1 for q in questions)
         earned_points = 0
 
         for answer in answers:
@@ -450,35 +648,149 @@ class CourseService:
             question = question_map.get(q_id)
             if not question:
                 continue
+            earned_points += CourseService._score_question(question, student_ans)
 
-            q_type = question.get('type')
-            correct = question.get('correct_answer')
-
-            if q_type in ('multiple_choice', 'dropdown', 'short_answer', 'fill_in_blank'):
-                if correct is not None and (
-                    str(student_ans).strip().lower() == str(correct).strip().lower()
-                ):
-                    earned_points += question.get('points', 1)
-            elif q_type == 'checkbox':
-                if isinstance(correct, list) and isinstance(student_ans, list):
-                    if set(str(x) for x in student_ans) == set(str(x) for x in correct):
-                        earned_points += question.get('points', 1)
-
+        earned_points = round(earned_points, 2)
         score = round((earned_points / total_points) * 100, 1) if total_points > 0 else None
+
+        mode = activity.get('feedback_mode') or 'immediate'
+        approved = mode == 'immediate'
 
         sa = StudentAnswerModel(
             student_id=student_id,
             activity_id=activity_id,
             answers=answers,
             score=score,
+            approved=approved,
+            earned_points=earned_points,
+            total_points=total_points,
         )
         sa.save_to_db()
+
+        can_see = CourseService.can_see_feedback(activity, {'approved': approved})
         return {
-            'score': score,
-            'earned_points': earned_points,
-            'total_points': total_points,
+            'score': score if can_see else None,
+            'earned_points': earned_points if can_see else None,
+            'total_points': total_points if can_see else None,
+            'xp_earned': int(round(earned_points)) if can_see else 0,
+            'feedback_pending': not can_see,
+            'approved': approved,
         }
 
     @staticmethod
     def get_my_answer(student_id, activity_id):
-        return StudentAnswerModel.get_by_student_and_activity(student_id, activity_id)
+        activity = ActivityModel.get_by_id(activity_id) or {}
+        answer_doc = StudentAnswerModel.get_by_student_and_activity(student_id, activity_id)
+        return CourseService._redact_answer(activity, answer_doc)
+
+    @staticmethod
+    def _classroom_students(classroom_id):
+        from src.app import mongo
+        from bson import ObjectId as ObjId
+
+        students_map = {}
+        all_student_ids = []
+        if not classroom_id:
+            return all_student_ids, students_map
+        classroom = mongo.db.classrooms.find_one({'_id': ObjId(classroom_id)})
+        if not classroom:
+            return all_student_ids, students_map
+        raw_ids = classroom.get('students', [])
+        all_student_ids = [str(sid) for sid in raw_ids]
+        if not all_student_ids:
+            return all_student_ids, students_map
+        user_docs = list(mongo.db.users.find(
+            {'_id': {'$in': [ObjId(sid) for sid in all_student_ids]}},
+            {'_id': 1, 'name': 1, 'email': 1}
+        ))
+        for u in user_docs:
+            uid = str(u['_id'])
+            students_map[uid] = {
+                '_id': uid,
+                'name': u.get('name') or u.get('email', uid[-6:]),
+                'email': u.get('email', ''),
+            }
+        return all_student_ids, students_map
+
+    @staticmethod
+    def get_course_ranking(course_id, user_id=None):
+        course = CourseModel.get_by_id(course_id)
+        if not course:
+            return None
+
+        all_student_ids, students_map = CourseService._classroom_students(
+            course.get('classroom_id')
+        )
+        activities = ActivityModel.get_by_course(course_id)
+
+        stats = {
+            sid: {
+                **students_map.get(sid, {'_id': sid, 'name': sid[-6:], 'email': ''}),
+                'xp': 0,
+                'scores': [],
+                'submitted': 0,
+                'perfect': False,
+            }
+            for sid in all_student_ids
+        }
+
+        for activity in activities:
+            answers = StudentAnswerModel.get_by_activity(activity['_id'])
+            for answer in answers:
+                sid = answer.get('student_id')
+                if sid not in stats:
+                    continue
+                stats[sid]['submitted'] += 1
+                if not CourseService.can_see_feedback(activity, answer):
+                    continue
+                earned = answer.get('earned_points')
+                if earned is None and answer.get('score') is not None:
+                    # Legacy submissions without earned_points
+                    total = sum(
+                        q.get('points', 1) or 1
+                        for q in QuestionModel.get_by_activity(activity['_id'], for_student=False)
+                    )
+                    earned = round((answer['score'] / 100) * total, 2) if total else 0
+                stats[sid]['xp'] += earned or 0
+                if answer.get('score') is not None:
+                    stats[sid]['scores'].append(answer['score'])
+                    if answer['score'] >= 100:
+                        stats[sid]['perfect'] = True
+
+        ranking = []
+        for sid, row in stats.items():
+            scores = row.pop('scores')
+            avg_score = round(sum(scores) / len(scores), 1) if scores else None
+            ranking.append({
+                **row,
+                'xp': int(round(row['xp'])),
+                'avg_score': avg_score,
+                'badges': [],
+            })
+
+        ranking.sort(key=lambda r: (-r['xp'], -(r['avg_score'] or -1), r['name'].lower()))
+        for index, row in enumerate(ranking, start=1):
+            row['rank'] = index
+            badges = []
+            if row['submitted'] >= 1:
+                badges.append('first_step')
+            if row['perfect']:
+                badges.append('perfect')
+            if index <= 3 and row['xp'] > 0:
+                badges.append('podium')
+            if row['avg_score'] is not None and row['avg_score'] >= 85:
+                badges.append('top_performer')
+            if row['avg_score'] is not None and row['avg_score'] < 60:
+                badges.append('at_risk')
+            row['badges'] = badges
+            row.pop('perfect', None)
+
+        me = None
+        if user_id:
+            me = next((r for r in ranking if r['_id'] == str(user_id)), None)
+
+        return {
+            'ranking': ranking,
+            'me': me,
+            'total_activities': len(activities),
+        }

@@ -1,6 +1,13 @@
+import re
 from bson import ObjectId
 from datetime import datetime, timezone
 from src.app import mongo
+
+BLANK_RE = re.compile(r'_{3,}')
+
+
+def count_blanks(text):
+    return len(BLANK_RE.findall(text or ''))
 
 
 class CourseModel:
@@ -283,9 +290,11 @@ class LessonModel:
 
 
 class ActivityModel:
+    FEEDBACK_MODES = ('immediate', 'after_correction')
+
     def __init__(self, _id=None, title=None, description=None, order=0,
                  module_id=None, course_id=None, visible=True, scheduled_at=None,
-                 created_at=None, updated_at=None, **kwargs):
+                 feedback_mode='immediate', created_at=None, updated_at=None, **kwargs):
         self._id = str(_id) if _id else None
         self.title = title
         self.description = description or ''
@@ -294,6 +303,9 @@ class ActivityModel:
         self.course_id = course_id
         self.visible = visible if visible is not None else True
         self.scheduled_at = scheduled_at
+        self.feedback_mode = (
+            feedback_mode if feedback_mode in self.FEEDBACK_MODES else 'immediate'
+        )
         self.created_at = created_at or datetime.now(timezone.utc)
         self.updated_at = updated_at or datetime.now(timezone.utc)
 
@@ -312,6 +324,7 @@ class ActivityModel:
             'course_id': ObjectId(self.course_id),
             'visible': self.visible,
             'scheduled_at': self.scheduled_at,
+            'feedback_mode': self.feedback_mode,
             'created_at': self.created_at,
             'updated_at': self.updated_at,
         }
@@ -328,6 +341,7 @@ class ActivityModel:
             'module_id': str(self.module_id) if self.module_id else None,
             'course_id': str(self.course_id) if self.course_id else None,
             'visible': self.visible,
+            'feedback_mode': self.feedback_mode or 'immediate',
             'scheduled_at': (
                 self.scheduled_at.isoformat()
                 if self.scheduled_at and hasattr(self.scheduled_at, 'isoformat')
@@ -365,6 +379,13 @@ class ActivityModel:
     @staticmethod
     def delete(activity_id):
         mongo.db.activities.delete_one({'_id': ObjectId(activity_id)})
+
+    @staticmethod
+    def get_by_course(course_id):
+        docs = list(
+            mongo.db.activities.find({'course_id': ObjectId(course_id)}).sort('order', 1)
+        )
+        return [ActivityModel(**doc).to_dict() for doc in docs]
 
     @staticmethod
     def reorder(module_id, activity_ids):
@@ -432,7 +453,7 @@ class QuestionModel:
             'created_at': self.created_at,
             'updated_at': self.updated_at,
         }
-        if include_correct_answer or self.show_answer:
+        if include_correct_answer:
             d['correct_answer'] = self.correct_answer
         return d
 
@@ -464,6 +485,14 @@ class QuestionModel:
     @staticmethod
     def delete_by_activity(activity_id):
         mongo.db.questions.delete_many({'activity_id': ObjectId(activity_id)})
+
+    @staticmethod
+    def reorder(activity_id, question_ids):
+        for index, question_id in enumerate(question_ids):
+            mongo.db.questions.update_one(
+                {'_id': ObjectId(question_id), 'activity_id': ObjectId(activity_id)},
+                {'$set': {'order': index, 'updated_at': datetime.now(timezone.utc)}}
+            )
 
 
 class LessonViewModel:
@@ -506,7 +535,8 @@ class LessonViewModel:
 
 class StudentAnswerModel:
     def __init__(self, _id=None, student_id=None, activity_id=None, answers=None,
-                 submitted_at=None, score=None, approved=False, **kwargs):
+                 submitted_at=None, score=None, approved=False,
+                 earned_points=None, total_points=None, **kwargs):
         self._id = str(_id) if _id else None
         self.student_id = student_id
         self.activity_id = activity_id
@@ -514,6 +544,8 @@ class StudentAnswerModel:
         self.submitted_at = submitted_at or datetime.now(timezone.utc)
         self.score = score
         self.approved = approved
+        self.earned_points = earned_points
+        self.total_points = total_points
 
     def save_to_db(self):
         data = {
@@ -522,6 +554,9 @@ class StudentAnswerModel:
             'answers': self.answers,
             'submitted_at': self.submitted_at,
             'score': self.score,
+            'approved': self.approved or False,
+            'earned_points': self.earned_points,
+            'total_points': self.total_points,
         }
         mongo.db.student_answers.update_one(
             {
@@ -546,6 +581,8 @@ class StudentAnswerModel:
             ),
             'score': self.score,
             'approved': self.approved or False,
+            'earned_points': self.earned_points,
+            'total_points': self.total_points,
         }
 
     @staticmethod
@@ -577,6 +614,13 @@ class StudentAnswerModel:
                 'student_id': ObjectId(student_id),
             },
             {'$set': {'approved': approved}},
+        )
+
+    @staticmethod
+    def approve_all(activity_id):
+        mongo.db.student_answers.update_many(
+            {'activity_id': ObjectId(activity_id)},
+            {'$set': {'approved': True}},
         )
 
     @staticmethod

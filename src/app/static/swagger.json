@@ -31,7 +31,8 @@
     { "name": "Classroom", "description": "Sala de aula" },
     { "name": "Notifications", "description": "Notificações" },
     { "name": "Streak", "description": "Sequência de estudos" },
-    { "name": "Books", "description": "Livros" }
+    { "name": "Books", "description": "Livros" },
+    { "name": "Course", "description": "Cursos, atividades e questões" }
   ],
   "paths": {
     "/auth/register": {
@@ -983,6 +984,197 @@
           }
         ],
         "responses": { "200": { "description": "Atribuído" }, "403": { "description": "Apenas admin" }, "400": { "description": "user_id/book_id obrigatórios" } }
+      }
+    },
+    "/course/create": {
+      "post": {
+        "tags": ["Course"],
+        "summary": "Criar curso na sala",
+        "security": [{ "Bearer": [] }],
+        "parameters": [{
+          "name": "body", "in": "body", "required": true,
+          "schema": {
+            "type": "object",
+            "required": ["name", "classroom_id"],
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "classroom_id": { "type": "string" }
+            }
+          }
+        }],
+        "responses": { "201": { "description": "Curso criado" }, "403": { "description": "Apenas professor" } }
+      }
+    },
+    "/course/activity/create": {
+      "post": {
+        "tags": ["Course"],
+        "summary": "Criar atividade",
+        "security": [{ "Bearer": [] }],
+        "parameters": [{
+          "name": "body", "in": "body", "required": true,
+          "schema": {
+            "type": "object",
+            "required": ["title", "module_id", "course_id"],
+            "properties": {
+              "title": { "type": "string" },
+              "description": { "type": "string" },
+              "module_id": { "type": "string" },
+              "course_id": { "type": "string" },
+              "visible": { "type": "boolean" },
+              "scheduled_at": { "type": "string" },
+              "feedback_mode": { "type": "string", "enum": ["immediate", "after_correction"] }
+            }
+          }
+        }],
+        "responses": { "201": { "description": "Atividade criada" }, "400": { "description": "Campos obrigatórios" } }
+      }
+    },
+    "/course/activity/{activity_id}": {
+      "get": {
+        "tags": ["Course"],
+        "summary": "Detalhe da atividade com questões (gabarito só para professor ou após feedback)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [{ "name": "activity_id", "in": "path", "required": true, "type": "string" }],
+        "responses": { "200": { "description": "Atividade" }, "404": { "description": "Não encontrada" } }
+      },
+      "put": {
+        "tags": ["Course"],
+        "summary": "Atualizar atividade",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          { "name": "activity_id", "in": "path", "required": true, "type": "string" },
+          {
+            "name": "body", "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "title": { "type": "string" },
+                "description": { "type": "string" },
+                "visible": { "type": "boolean" },
+                "scheduled_at": { "type": "string" },
+                "feedback_mode": { "type": "string", "enum": ["immediate", "after_correction"] }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Atualizada" } }
+      },
+      "delete": {
+        "tags": ["Course"],
+        "summary": "Excluir atividade",
+        "security": [{ "Bearer": [] }],
+        "parameters": [{ "name": "activity_id", "in": "path", "required": true, "type": "string" }],
+        "responses": { "200": { "description": "Excluída" } }
+      }
+    },
+    "/course/question/create": {
+      "post": {
+        "tags": ["Course"],
+        "summary": "Criar questão (texto simples, múltipla escolha, checkbox ou lacunas)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [{
+          "name": "body", "in": "body", "required": true,
+          "schema": {
+            "type": "object",
+            "required": ["text", "type", "activity_id"],
+            "properties": {
+              "text": { "type": "string" },
+              "type": { "type": "string", "enum": ["short_answer", "multiple_choice", "checkbox", "fill_in_blank", "dropdown", "paragraph"] },
+              "options": { "type": "array", "items": { "type": "string" } },
+              "correct_answer": { "description": "string, array de strings ou respostas das lacunas" },
+              "points": { "type": "integer" },
+              "activity_id": { "type": "string" }
+            }
+          }
+        }],
+        "responses": { "201": { "description": "Questão criada" }, "400": { "description": "Validação" } }
+      }
+    },
+    "/course/question/{question_id}": {
+      "put": {
+        "tags": ["Course"],
+        "summary": "Atualizar questão",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          { "name": "question_id", "in": "path", "required": true, "type": "string" },
+          { "name": "body", "in": "body", "schema": { "type": "object" } }
+        ],
+        "responses": { "200": { "description": "Atualizada" }, "400": { "description": "Validação" } }
+      },
+      "delete": {
+        "tags": ["Course"],
+        "summary": "Excluir questão",
+        "security": [{ "Bearer": [] }],
+        "parameters": [{ "name": "question_id", "in": "path", "required": true, "type": "string" }],
+        "responses": { "200": { "description": "Excluída" } }
+      }
+    },
+    "/course/activity/{activity_id}/questions/reorder": {
+      "put": {
+        "tags": ["Course"],
+        "summary": "Reordenar questões da atividade",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          { "name": "activity_id", "in": "path", "required": true, "type": "string" },
+          {
+            "name": "body", "in": "body", "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["question_ids"],
+              "properties": { "question_ids": { "type": "array", "items": { "type": "string" } } }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Reordenado" } }
+      }
+    },
+    "/course/activity/{activity_id}/submit": {
+      "post": {
+        "tags": ["Course"],
+        "summary": "Aluno envia respostas da atividade",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          { "name": "activity_id", "in": "path", "required": true, "type": "string" },
+          {
+            "name": "body", "in": "body", "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["answers"],
+              "properties": {
+                "answers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "question_id": { "type": "string" },
+                      "answer": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Enviado. Nota só aparece no modo immediate ou após correção." } }
+      }
+    },
+    "/course/activity/{activity_id}/approve_all": {
+      "post": {
+        "tags": ["Course"],
+        "summary": "Liberar correção para todos os alunos",
+        "security": [{ "Bearer": [] }],
+        "parameters": [{ "name": "activity_id", "in": "path", "required": true, "type": "string" }],
+        "responses": { "200": { "description": "Liberado" } }
+      }
+    },
+    "/course/{course_id}/ranking": {
+      "get": {
+        "tags": ["Course"],
+        "summary": "Ranking de XP do curso",
+        "security": [{ "Bearer": [] }],
+        "parameters": [{ "name": "course_id", "in": "path", "required": true, "type": "string" }],
+        "responses": { "200": { "description": "Ranking" }, "404": { "description": "Curso não encontrado" } }
       }
     }
   }
