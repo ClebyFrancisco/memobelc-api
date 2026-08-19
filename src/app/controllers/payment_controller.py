@@ -1,6 +1,5 @@
 from flask import Blueprint, jsonify, request
 from src.app.middlewares.token_required import token_required
-from src.app.services.payment_service import PaymentService
 from src.app.provider.stripe import Stripe
 
 
@@ -8,12 +7,15 @@ class PaymentController:
     @staticmethod
     @token_required
     def create_subscription(current_user, token):
-        response = PaymentService.create_subscription(current_user._id)
-        return jsonify(response), 200
-    
-    
+        return jsonify({
+            "error": "Stripe checkout is disabled. Use /billing/checkout with Asaas or Google Play.",
+            "code": "stripe_disabled",
+        }), 410
+
     @staticmethod
     def stripe_webhook():
+        if not Stripe.is_configured():
+            return jsonify({"error": "Stripe is disabled"}), 410
         payload = request.data
         sig_header = request.headers.get("STRIPE_SIGNATURE", "")
         try:
@@ -24,7 +26,7 @@ class PaymentController:
                 return jsonify({"error": "Invalid signature"}), 400
             return jsonify({"error": str(e)}), 500
 
-        
+
 payment_blueprint = Blueprint("payment_blueprint", __name__)
 
 payment_blueprint.route("/payment_intent", methods=["POST"])(PaymentController.create_subscription)

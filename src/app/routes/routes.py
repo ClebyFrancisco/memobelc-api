@@ -14,6 +14,11 @@ from src.app.controllers.books_controller import books_blueprint
 from src.app.controllers.invite_controller import invite_blueprint
 from src.app.controllers.course_controller import course_blueprint
 from src.app.controllers.admin_controller import admin_blueprint
+from src.app.controllers.plan_controller import plan_blueprint
+from src.app.controllers.coupon_controller import coupon_blueprint
+from src.app.controllers.billing_controller import billing_blueprint
+from src.app.controllers.bundle_controller import bundle_blueprint
+from src.app.controllers.admin_billing_controller import entitlement_blueprint, admin_billing_blueprint
 
 
 routes = Blueprint("main", __name__)
@@ -34,3 +39,9 @@ routes.register_blueprint(books_blueprint, url_prefix="/books")
 routes.register_blueprint(invite_blueprint, url_prefix="/invite")
 routes.register_blueprint(course_blueprint, url_prefix="/course")
 routes.register_blueprint(admin_blueprint, url_prefix="/admin")
+routes.register_blueprint(plan_blueprint, url_prefix="/plans")
+routes.register_blueprint(coupon_blueprint, url_prefix="/coupons")
+routes.register_blueprint(billing_blueprint, url_prefix="/billing")
+routes.register_blueprint(bundle_blueprint, url_prefix="/bundles")
+routes.register_blueprint(entitlement_blueprint, url_prefix="/entitlements")
+routes.register_blueprint(admin_billing_blueprint, url_prefix="/admin/billing")

@@ -32,7 +32,12 @@
     { "name": "Notifications", "description": "Notificações" },
     { "name": "Streak", "description": "Sequência de estudos" },
     { "name": "Books", "description": "Livros" },
-    { "name": "Course", "description": "Cursos, atividades e questões" }
+    { "name": "Course", "description": "Cursos, atividades e questões" },
+    { "name": "Billing", "description": "Assinaturas, checkout Asaas e Google Play" },
+    { "name": "Plans", "description": "Planos de assinatura" },
+    { "name": "Coupons", "description": "Cupons de desconto" },
+    { "name": "Bundles", "description": "Conjuntos de livros" },
+    { "name": "AdminBilling", "description": "Gestão administrativa de cobranças e acesso" }
   ],
   "paths": {
     "/auth/register": {
@@ -1175,6 +1180,220 @@
         "security": [{ "Bearer": [] }],
         "parameters": [{ "name": "course_id", "in": "path", "required": true, "type": "string" }],
         "responses": { "200": { "description": "Ranking" }, "404": { "description": "Curso não encontrado" } }
+      }
+    },
+    "/plans/public": {
+      "get": {
+        "tags": ["Plans"],
+        "summary": "Listar planos públicos ativos",
+        "responses": { "200": { "description": "Lista de planos" } }
+      }
+    },
+    "/plans/admin": {
+      "get": {
+        "tags": ["Plans"],
+        "summary": "Listar todos os planos (admin)",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Planos" }, "403": { "description": "Não autorizado" } }
+      },
+      "post": {
+        "tags": ["Plans"],
+        "summary": "Criar plano (admin)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [{
+          "name": "body",
+          "in": "body",
+          "schema": {
+            "type": "object",
+            "required": ["name", "price"],
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "price": { "type": "number" },
+              "cycle": { "type": "string", "enum": ["WEEKLY", "MONTHLY", "QUARTERLY", "SEMIANNUALLY", "YEARLY"] },
+              "trial_days": { "type": "integer" },
+              "included_service_keys": { "type": "array", "items": { "type": "string" } },
+              "included_book_ids": { "type": "array", "items": { "type": "string" } },
+              "google_play_product_id": { "type": "string" }
+            }
+          }
+        }],
+        "responses": { "201": { "description": "Criado" } }
+      }
+    },
+    "/billing/checkout": {
+      "post": {
+        "tags": ["Billing"],
+        "summary": "Iniciar checkout Asaas (web) ou Google Play (Android)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [{
+          "name": "body",
+          "in": "body",
+          "schema": {
+            "type": "object",
+            "required": ["product_type", "product_id"],
+            "properties": {
+              "product_type": { "type": "string", "enum": ["plan", "book", "bundle"] },
+              "product_id": { "type": "string" },
+              "platform": { "type": "string", "enum": ["web", "android", "ios"] },
+              "billing_type": { "type": "string" },
+              "coupon_code": { "type": "string" }
+            }
+          }
+        }],
+        "responses": { "200": { "description": "URL de checkout ou SKU" } }
+      }
+    },
+    "/billing/me": {
+      "get": {
+        "tags": ["Billing"],
+        "summary": "Assinatura e entitlements do usuário",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Estado da assinatura" } }
+      }
+    },
+    "/billing/payments": {
+      "get": {
+        "tags": ["Billing"],
+        "summary": "Histórico de pagamentos do usuário",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Pagamentos" } }
+      }
+    },
+    "/billing/cancel": {
+      "post": {
+        "tags": ["Billing"],
+        "summary": "Cancelar assinatura atual",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Cancelada" } }
+      }
+    },
+    "/billing/change-plan": {
+      "post": {
+        "tags": ["Billing"],
+        "summary": "Upgrade ou downgrade de plano (mesmo provedor)",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Plano atualizado" } }
+      }
+    },
+    "/billing/asaas/webhook": {
+      "post": {
+        "tags": ["Billing"],
+        "summary": "Webhook Asaas",
+        "responses": { "200": { "description": "Processado" } }
+      }
+    },
+    "/billing/google/verify": {
+      "post": {
+        "tags": ["Billing"],
+        "summary": "Validar compra Google Play",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Compra validada" } }
+      }
+    },
+    "/billing/google/rtdn": {
+      "post": {
+        "tags": ["Billing"],
+        "summary": "Real-time Developer Notifications do Google Play",
+        "responses": { "200": { "description": "Processado" } }
+      }
+    },
+    "/entitlements/me": {
+      "get": {
+        "tags": ["Billing"],
+        "summary": "Resolver permissões do usuário autenticado",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Entitlements" } }
+      }
+    },
+    "/coupons/validate": {
+      "post": {
+        "tags": ["Coupons"],
+        "summary": "Validar cupom",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Cupom válido" } }
+      }
+    },
+    "/coupons/admin": {
+      "get": {
+        "tags": ["Coupons"],
+        "summary": "Listar cupons (admin)",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Cupons" } }
+      },
+      "post": {
+        "tags": ["Coupons"],
+        "summary": "Criar cupom (admin)",
+        "security": [{ "Bearer": [] }],
+        "responses": { "201": { "description": "Criado" } }
+      }
+    },
+    "/bundles/public": {
+      "get": {
+        "tags": ["Bundles"],
+        "summary": "Listar conjuntos publicados",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Conjuntos" } }
+      }
+    },
+    "/bundles/admin": {
+      "get": {
+        "tags": ["Bundles"],
+        "summary": "Listar conjuntos (admin)",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Conjuntos" } }
+      },
+      "post": {
+        "tags": ["Bundles"],
+        "summary": "Criar conjunto (admin)",
+        "security": [{ "Bearer": [] }],
+        "responses": { "201": { "description": "Criado" } }
+      }
+    },
+    "/admin/billing/subscriptions": {
+      "get": {
+        "tags": ["AdminBilling"],
+        "summary": "Listar assinaturas com filtros",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Assinaturas" } }
+      }
+    },
+    "/admin/billing/payments": {
+      "get": {
+        "tags": ["AdminBilling"],
+        "summary": "Listar compras e transações",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Pagamentos" } }
+      }
+    },
+    "/admin/billing/grants": {
+      "post": {
+        "tags": ["AdminBilling"],
+        "summary": "Liberar plano, livro, conjunto ou serviço manualmente",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Concedido" } }
+      }
+    },
+    "/admin/billing/external-sales": {
+      "get": {
+        "tags": ["AdminBilling"],
+        "summary": "Listar vendas externas",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Vendas" } }
+      },
+      "post": {
+        "tags": ["AdminBilling"],
+        "summary": "Registrar venda externa e conceder acesso",
+        "security": [{ "Bearer": [] }],
+        "responses": { "201": { "description": "Registrada" } }
+      }
+    },
+    "/admin/billing/access": {
+      "get": {
+        "tags": ["AdminBilling"],
+        "summary": "Regras de visibilidade dos serviços",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Regras" } }
       }
     }
   }

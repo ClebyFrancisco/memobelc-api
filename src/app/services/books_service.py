@@ -58,6 +58,9 @@ class BookService:
             is_free=data.get("is_free", True),
             price=data.get("price"),
             payment_link=data.get("payment_link"),
+            sale_mode=data.get("sale_mode") or "both",
+            is_published=data.get("is_published", True),
+            google_play_product_id=data.get("google_play_product_id"),
             chapters=chapters_with_decks,
             collection_id=collection_id,
             created_by=admin_id,
@@ -133,6 +136,9 @@ class BookService:
             is_free=data.get("is_free", book.get("is_free")),
             price=data.get("price", book.get("price")),
             payment_link=data.get("payment_link", book.get("payment_link")),
+            sale_mode=data.get("sale_mode", book.get("sale_mode") or "both"),
+            is_published=data.get("is_published", book.get("is_published", True)),
+            google_play_product_id=data.get("google_play_product_id", book.get("google_play_product_id")),
             chapters=chapters_with_decks,
             collection_id=collection_id,
             created_at=book.get("created_at"),
@@ -147,7 +153,19 @@ class BookService:
     @staticmethod
     def get_available_books(user_id):
         """Retorna livros disponíveis e para descobrir."""
-        return BookModel.get_available_books(user_id)
+        result = BookModel.get_available_books(user_id)
+        from src.app.services.entitlement_service import EntitlementService
+        entitled = EntitlementService.user_book_ids(user_id)
+        my_ids = {book["_id"] for book in result.get("my_books", [])}
+        still_discover = []
+        for book in result.get("discover", []):
+            if book["_id"] in entitled and book["_id"] not in my_ids:
+                result["my_books"].append(book)
+                my_ids.add(book["_id"])
+            else:
+                still_discover.append(book)
+        result["discover"] = still_discover
+        return result
 
     @staticmethod
     def get_book_by_id(book_id):
@@ -259,6 +277,9 @@ class BookService:
             is_free=book.get("is_free"),
             price=book.get("price"),
             payment_link=book.get("payment_link"),
+            sale_mode=book.get("sale_mode") or "both",
+            is_published=book.get("is_published", True),
+            google_play_product_id=book.get("google_play_product_id"),
             chapters=chapters_with_decks,
             collection_id=collection_id,
             created_at=book.get("created_at"),
@@ -298,6 +319,9 @@ class BookService:
             is_free=book.get("is_free"),
             price=book.get("price"),
             payment_link=book.get("payment_link"),
+            sale_mode=book.get("sale_mode") or "both",
+            is_published=book.get("is_published", True),
+            google_play_product_id=book.get("google_play_product_id"),
             chapters=chapters,
             collection_id=collection_id,
             created_at=book.get("created_at"),

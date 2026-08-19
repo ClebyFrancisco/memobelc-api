@@ -27,6 +27,10 @@ def create_app():
     mongo.init_app(app)
     mail.init_app(app)
 
+    with app.app_context():
+        from .models.billing_indexes import ensure_billing_indexes
+        ensure_billing_indexes()
+
     SWAGGER_URL = "/doc"
     # Usar rota da própria app para o spec (mesma origem, evita CORS no fetch do spec)
     API_URL = "/doc/swagger.json"
@@ -83,6 +87,12 @@ def create_app():
             trigger=CronTrigger(hour=9, minute=0),
             id="daily_study_reminder",
         )
+        from apscheduler.triggers.interval import IntervalTrigger
+        scheduler.add_job(
+            func=lambda: _run_billing_reconcile(app),
+            trigger=IntervalTrigger(hours=6),
+            id="billing_reconcile",
+        )
         scheduler.start()
         app.logger.info("✅ APScheduler iniciado no worker principal")
 
@@ -93,3 +103,9 @@ def _run_daily_reminders(app):
     """Executa envio de lembretes diários dentro do contexto da app."""
     with app.app_context():
         NotificationService.send_daily_study_notifications()
+
+
+def _run_billing_reconcile(app):
+    with app.app_context():
+        from .services.billing_service import BillingService
+        BillingService.reconcile()

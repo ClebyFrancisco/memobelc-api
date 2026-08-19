@@ -4,6 +4,8 @@ from flask import Blueprint, jsonify, request
 from werkzeug.exceptions import BadRequest, Unauthorized
 from src.app.services.books_service import BookService
 from src.app.middlewares.token_required import token_required
+from src.app.services.entitlement_service import EntitlementService
+from src.app.models.payment_model import PaymentModel
 from src.app import mongo
 from bson import ObjectId
 
@@ -86,16 +88,9 @@ class BookController:
         if not book:
             return jsonify({"error": "Book not found"}), 404
 
-        # Verifica se o usuário tem acesso ao livro
-        if not book.get("is_free"):
-            user_obj_id = ObjectId(current_user._id)
-            book_obj_id = ObjectId(book_id)
-            has_access = mongo.db.user_books.find_one({
-                "user_id": user_obj_id,
-                "book_id": book_obj_id,
-            })
-            if not has_access:
-                return jsonify({"error": "Access denied. Book requires payment."}), 403
+        allowed, payload = EntitlementService.can_access_book(current_user, book_id)
+        if not allowed:
+            return jsonify(payload), 403
 
         return jsonify(book), 200
 
@@ -114,15 +109,24 @@ class BookController:
         if not book:
             return jsonify({"error": "Book not found"}), 404
 
-        # Se for gratuito ou se o usuário já pagou (verificado externamente), adiciona
         if book.get("is_free"):
             BookService.add_book_to_user(current_user._id, book_id)
             return jsonify({"message": "Book added to your library"}), 200
-        else:
-            # Para livros pagos, assumimos que o pagamento foi processado externamente
-            # e o usuário está apenas confirmando
+
+        allowed, _payload = EntitlementService.can_access_book(current_user, book_id)
+        if allowed:
             BookService.add_book_to_user(current_user._id, book_id)
-            return jsonify({"message": "Book purchased and added to your library"}), 200
+            return jsonify({"message": "Book already available in your library"}), 200
+
+        confirmed = PaymentModel.confirmed_for_product(current_user._id, "book", book_id)
+        if not confirmed:
+            return jsonify({
+                "error": "Payment not confirmed. Use /billing/checkout to buy this book.",
+                "code": "payment_required",
+            }), 402
+
+        EntitlementService.grant_book(current_user._id, book_id, source="purchase", source_id=confirmed["_id"])
+        return jsonify({"message": "Book purchased and added to your library"}), 200
 
     @staticmethod
     @token_required
@@ -177,7 +181,9 @@ class BookController:
         if not user_id or not book_id:
             return jsonify({"error": "Missing user_id or book_id"}), 400
 
-        BookService.add_book_to_user(user_id, book_id)
+        EntitlementService.grant_book(
+            user_id, book_id, source="manual", granted_by=current_user._id, notes="admin assign"
+        )
         return jsonify({"message": "Book assigned to user"}), 200
 
     @staticmethod

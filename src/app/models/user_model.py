@@ -1,5 +1,4 @@
 from src.app import mongo
-from src.app.provider.stripe import Stripe
 import random
 from bson import ObjectId
 import string
@@ -11,13 +10,16 @@ ALLOWED_ROLES = ("user", "teacher", "admin")
 
 
 class UserModel:
-    def __init__(self, _id=None, name = None, email=None, password=None, collections=None, customer_id=None, role='user', roles=None, **kwargs):
+    def __init__(self, _id=None, name = None, email=None, password=None, collections=None, customer_id=None, asaas_customer_id=None, role='user', roles=None, **kwargs):
         self._id = str(_id) if _id else None
         self.name = name
         self.email = email
         self.password = password
         self.collections = collections or []
         self.customer_id = customer_id
+        self.asaas_customer_id = asaas_customer_id
+        self.cpf_cnpj = kwargs.get("cpf_cnpj")
+        self.is_confirmed = kwargs.get("is_confirmed", False)
         self.roles = UserModel.normalize_roles(role=role, roles=roles)
         self.role = UserModel.primary_role(self.roles)
 
@@ -57,22 +59,50 @@ class UserModel:
 
     def save_to_db(self):
         """Salva o usuário no banco de dados MongoDB"""
-        
-        customer = Stripe.create_customer(self.email)
         user_data = {
             'name': self.name,
             'email': self.email,
             'password': self.password,
             'is_confirmed': False,
             "collections": self.collections,
-            "customer_id": customer.get('id'),
+            "customer_id": self.customer_id,
+            "asaas_customer_id": self.asaas_customer_id,
             "role": self.role,
             "roles": self.roles,
         }
-        
-        
-        mongo.db.users.insert_one(user_data)
+        result = mongo.db.users.insert_one(user_data)
+        self._id = str(result.inserted_id)
         return True
+
+    @staticmethod
+    def set_asaas_customer_id(user_id, asaas_customer_id):
+        mongo.db.users.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {"asaas_customer_id": asaas_customer_id}},
+        )
+
+    @staticmethod
+    def set_cpf_cnpj(user_id, cpf_cnpj):
+        mongo.db.users.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {"cpf_cnpj": cpf_cnpj}},
+        )
+
+    @staticmethod
+    def create_pending_user(name, email):
+        """Cria usuário pendente para venda externa (sem senha definida)."""
+        existing = UserModel.find_by_email(email)
+        if existing:
+            return existing
+        from werkzeug.security import generate_password_hash
+        import uuid
+        user = UserModel(
+            name=name or email.split("@")[0],
+            email=email.lower(),
+            password=generate_password_hash(uuid.uuid4().hex),
+        )
+        user.save_to_db()
+        return UserModel.find_by_email(email)
     
     @staticmethod
     def add_collections_to_user(user_id, collection_ids):
@@ -305,7 +335,8 @@ class UserModel:
             'name': self.name,
             'email': self.email,
             'collections': [str(ObjectId(collection_id)) for collection_id in self.collections],
-            'customer_id':self.customer_id,
+            'customer_id': self.customer_id,
+            'asaas_customer_id': self.asaas_customer_id,
             'role': self.role,
             'roles': self.roles,
         }
