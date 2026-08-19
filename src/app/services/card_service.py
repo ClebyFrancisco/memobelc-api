@@ -7,9 +7,75 @@ from src.app import mongo
 from src.app.services.notification_service import NotificationService
 
 
+VALID_CARD_TYPES = ("text", "multiple_choice", "image")
+
+
 class CardService:
     @staticmethod
-    def create_card(front, back, deck_id=None, user=None, audio=None, media_type='text'):
+    def validate_card_payload(data):
+        """Valida e normaliza o payload de criação/atualização de carta."""
+        if not data:
+            raise ValueError("request body is required")
+
+        card_type = data.get("card_type") or "text"
+        if card_type not in VALID_CARD_TYPES:
+            raise ValueError("invalid card_type")
+
+        front = data.get("front")
+        back = data.get("back")
+        audio = data.get("audio")
+        image = data.get("image")
+        options = data.get("options")
+        correct_index = data.get("correct_index")
+        media_type = data.get("media_type") or ("image" if card_type == "image" else "text")
+
+        if card_type == "text":
+            if not front or not back:
+                raise ValueError("front and back are required")
+        elif card_type == "multiple_choice":
+            if not front:
+                raise ValueError("front is required")
+            if not isinstance(options, list) or len(options) != 4:
+                raise ValueError("options must contain exactly 4 answers")
+            if any(not str(opt).strip() for opt in options):
+                raise ValueError("all 4 options must be filled")
+            try:
+                correct_index = int(correct_index)
+            except (TypeError, ValueError):
+                raise ValueError("correct_index must be an integer between 0 and 3")
+            if correct_index < 0 or correct_index > 3:
+                raise ValueError("correct_index must be between 0 and 3")
+            options = [str(opt) for opt in options]
+            back = options[correct_index]
+        elif card_type == "image":
+            if not image or not back:
+                raise ValueError("image and back are required")
+            front = front or ""
+
+        return {
+            "front": front,
+            "back": back,
+            "audio": audio,
+            "media_type": media_type,
+            "card_type": card_type,
+            "options": options if card_type == "multiple_choice" else None,
+            "correct_index": correct_index if card_type == "multiple_choice" else None,
+            "image": image if card_type == "image" else None,
+        }
+
+    @staticmethod
+    def create_card(
+        front,
+        back,
+        deck_id=None,
+        user=None,
+        audio=None,
+        media_type="text",
+        card_type="text",
+        options=None,
+        correct_index=None,
+        image=None,
+    ):
         """Cria um novo card e o salva no banco de dados."""
         card = CardModel(
             front=front,
@@ -18,6 +84,10 @@ class CardService:
             user=user,
             audio=audio,
             media_type=media_type,
+            card_type=card_type,
+            options=options,
+            correct_index=correct_index,
+            image=image,
         )
         card.save_to_db()
         card_dict = card.to_dict()
@@ -63,11 +133,28 @@ class CardService:
         if not card:
             return None
         if isinstance(card, dict):
-            card = CardModel(**card)
+            card = CardModel.from_dict(card)
 
-        card.front = data.get("front", card.front)
-        card.back = data.get("back", card.back)
-        card.media_type = data.get("media_type", card.media_type)
+        merged = {
+            "front": data.get("front", card.front),
+            "back": data.get("back", card.back),
+            "audio": data.get("audio", card.audio),
+            "media_type": data.get("media_type", card.media_type),
+            "card_type": data.get("card_type", card.card_type),
+            "options": data.get("options", card.options),
+            "correct_index": data.get("correct_index", card.correct_index),
+            "image": data.get("image", card.image),
+        }
+        normalized = CardService.validate_card_payload(merged)
+
+        card.front = normalized["front"]
+        card.back = normalized["back"]
+        card.audio = normalized["audio"]
+        card.media_type = normalized["media_type"]
+        card.card_type = normalized["card_type"]
+        card.options = normalized["options"]
+        card.correct_index = normalized["correct_index"]
+        card.image = normalized["image"]
         card.updated_at = datetime.now(timezone.utc)
 
         card.save_to_db()

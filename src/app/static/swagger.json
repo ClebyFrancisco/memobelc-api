@@ -426,12 +426,16 @@
                 "back": { "type": "string" },
                 "deck_id": { "type": "string" },
                 "user_id": { "type": "string" },
-                "audio": { "type": "string" }
+                "audio": { "type": "string" },
+                "card_type": { "type": "string", "enum": ["text", "multiple_choice", "image"] },
+                "options": { "type": "array", "items": { "type": "string" } },
+                "correct_index": { "type": "integer", "minimum": 0, "maximum": 3 },
+                "image": { "type": "string" }
               }
             }
           }
         ],
-        "responses": { "201": { "description": "Carta criada" }, "400": { "description": "front/back obrigatórios" } }
+        "responses": { "201": { "description": "Carta criada" }, "400": { "description": "Campos obrigatórios conforme o tipo da carta" } }
       }
     },
     "/card/create_card_in_lots": {

@@ -16,7 +16,7 @@ class DeckService:
         if cards is not None:
             card_ids = []
             for card in cards:
-                card_data = CardModel(**card)
+                card_data = CardModel.from_dict(card)
                 card_id = card_data.save_to_db()
                 card_ids.append(card_id)
 
