@@ -19,6 +19,7 @@ from src.app.controllers.coupon_controller import coupon_blueprint
 from src.app.controllers.billing_controller import billing_blueprint
 from src.app.controllers.bundle_controller import bundle_blueprint
 from src.app.controllers.admin_billing_controller import entitlement_blueprint, admin_billing_blueprint
+from src.app.controllers.support_controller import support_blueprint, admin_support_blueprint
 
 
 routes = Blueprint("main", __name__)
@@ -45,3 +46,5 @@ routes.register_blueprint(billing_blueprint, url_prefix="/billing")
 routes.register_blueprint(bundle_blueprint, url_prefix="/bundles")
 routes.register_blueprint(entitlement_blueprint, url_prefix="/entitlements")
 routes.register_blueprint(admin_billing_blueprint, url_prefix="/admin/billing")
+routes.register_blueprint(support_blueprint, url_prefix="/support")
+routes.register_blueprint(admin_support_blueprint, url_prefix="/admin/support")

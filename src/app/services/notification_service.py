@@ -19,6 +19,7 @@ class NotificationService:
     TYPE_NEW_CARDS = "new_cards"
     TYPE_TEACHER_CUSTOM = "teacher_custom"
     TYPE_ADMIN_CUSTOM = "admin_custom"
+    TYPE_SUPPORT = "support"
 
     # ---------- Funções utilitárias ----------
     @staticmethod
@@ -198,5 +199,49 @@ class NotificationService:
             )
 
         return {"sent_to": len(target_users)}
+
+    @staticmethod
+    def _admin_user_ids(exclude_user_id: Optional[str] = None) -> List[str]:
+        cursor = mongo.db.users.find(
+            {"$or": [{"role": "admin"}, {"roles": "admin"}]},
+            {"_id": 1},
+        )
+        ids = [str(user["_id"]) for user in cursor]
+        if exclude_user_id:
+            ids = [uid for uid in ids if uid != str(exclude_user_id)]
+        return ids
+
+    @staticmethod
+    def notify_admins_new_support_message(ticket_id: str, user_id: str, preview: str):
+        """Notifica admins quando um usuário envia mensagem de suporte."""
+        user = UserModel.find_by_id(user_id)
+        sender_name = (user.name if user and user.name else None) or "Usuário"
+        title = "Nova mensagem de suporte"
+        body = f"{sender_name}: {preview}" if preview else f"{sender_name} enviou uma mensagem."
+
+        for admin_id in NotificationService._admin_user_ids(exclude_user_id=user_id):
+            NotificationService._create_and_push(
+                user_id=admin_id,
+                notification_type=NotificationService.TYPE_SUPPORT,
+                title=title,
+                body=body,
+                extra_data={"ticket_id": str(ticket_id), "user_id": str(user_id)},
+            )
+
+    @staticmethod
+    def notify_user_support_reply(user_id: str, ticket_id: str, preview: str, admin_id: str):
+        """Notifica o usuário quando o admin responde no suporte."""
+        if str(user_id) == str(admin_id):
+            return
+
+        title = "Resposta do suporte"
+        body = preview or "O suporte respondeu a sua mensagem."
+        NotificationService._create_and_push(
+            user_id=str(user_id),
+            notification_type=NotificationService.TYPE_SUPPORT,
+            title=title,
+            body=body,
+            extra_data={"ticket_id": str(ticket_id)},
+        )
 
 
