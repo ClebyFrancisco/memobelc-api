@@ -92,6 +92,30 @@ class UserModel:
         )
 
     @staticmethod
+    def set_name(user_id, name):
+        if not name:
+            return
+        mongo.db.users.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {"name": name}},
+        )
+
+    @staticmethod
+    def find_by_cpf_cnpj(cpf_cnpj):
+        digits = "".join(ch for ch in str(cpf_cnpj or "") if ch.isdigit())
+        if not digits:
+            return None
+        candidates = [digits]
+        if len(digits) == 11:
+            candidates.append(f"{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}")
+        elif len(digits) == 14:
+            candidates.append(f"{digits[:2]}.{digits[2:5]}.{digits[5:8]}/{digits[8:12]}-{digits[12:]}")
+        user_data = mongo.db.users.find_one({"cpf_cnpj": {"$in": candidates}})
+        if user_data:
+            return UserModel(**user_data)
+        return None
+
+    @staticmethod
     def create_pending_user(name, email):
         """Cria usuário pendente para venda externa (sem senha definida)."""
         existing = UserModel.find_by_email(email)
@@ -124,7 +148,12 @@ class UserModel:
     @staticmethod
     def find_by_email(email):
         """Busca um usuário pelo email"""
-        user_data = mongo.db.users.find_one({'email': email})
+        if not email:
+            return None
+        email_lower = str(email).strip().lower()
+        user_data = mongo.db.users.find_one({'email': email_lower})
+        if not user_data:
+            user_data = mongo.db.users.find_one({'email': email})
         if user_data:
             return UserModel(**user_data)
         return None

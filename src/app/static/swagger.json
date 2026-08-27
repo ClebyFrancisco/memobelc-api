@@ -1376,7 +1376,51 @@
             }
           }
         }],
-        "responses": { "200": { "description": "JWT temporário para PIX + PIX ou URL de cartão. Não faz login no app." } }
+        "responses": { "200": { "description": "PIX ou URL de cartão. Perfil criado ou vinculado por e-mail/CPF. Sem senha." } }
+      }
+    },
+    "/billing/public/payments/{payment_id}/sync": {
+      "post": {
+        "tags": ["Billing"],
+        "summary": "Sincronizar pagamento do checkout público (e-mail + CPF, sem login)",
+        "parameters": [
+          { "name": "payment_id", "in": "path", "required": true, "type": "string" },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "required": ["email", "cpf_cnpj"],
+              "properties": {
+                "email": { "type": "string" },
+                "cpf_cnpj": { "type": "string" }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Status e granted" } }
+      }
+    },
+    "/billing/public/payments/{payment_id}/pix": {
+      "post": {
+        "tags": ["Billing"],
+        "summary": "QR PIX do checkout público (e-mail + CPF, sem login)",
+        "parameters": [
+          { "name": "payment_id", "in": "path", "required": true, "type": "string" },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "required": ["email", "cpf_cnpj"],
+              "properties": {
+                "email": { "type": "string" },
+                "cpf_cnpj": { "type": "string" }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "encoded_image, payload e expiration_date" } }
       }
     },
     "/billing/me": {

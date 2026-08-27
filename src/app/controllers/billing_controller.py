@@ -17,8 +17,24 @@ class BillingController:
     @staticmethod
     def public_checkout():
         data = request.get_json() or {}
+        data.pop("password", None)
         data["_remote_ip"] = _client_ip()
         payload, status = BillingService.public_checkout(data)
+        return jsonify(payload), status
+
+    @staticmethod
+    def public_sync_payment(payment_id):
+        data = request.get_json() or {}
+        payload, status = BillingService.public_sync_payment(payment_id, data)
+        return jsonify(payload), status
+
+    @staticmethod
+    def public_pix_qr(payment_id):
+        data = request.get_json(silent=True) or {}
+        if not data.get("email"):
+            data["email"] = request.args.get("email")
+            data["cpf_cnpj"] = request.args.get("cpf_cnpj")
+        payload, status = BillingService.public_get_pix_qr(payment_id, data)
         return jsonify(payload), status
 
     @staticmethod
@@ -98,6 +114,8 @@ class BillingController:
 
 billing_blueprint = Blueprint("billing_blueprint", __name__)
 billing_blueprint.route("/public/checkout", methods=["POST"])(BillingController.public_checkout)
+billing_blueprint.route("/public/payments/<payment_id>/sync", methods=["POST"])(BillingController.public_sync_payment)
+billing_blueprint.route("/public/payments/<payment_id>/pix", methods=["POST"])(BillingController.public_pix_qr)
 billing_blueprint.route("/checkout", methods=["POST"])(BillingController.checkout)
 billing_blueprint.route("/me", methods=["GET"])(BillingController.me)
 billing_blueprint.route("/payments", methods=["GET"])(BillingController.payments)

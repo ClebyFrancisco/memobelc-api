@@ -10,7 +10,7 @@ This document describes the monetization architecture of MemoBelc.
 - **Stripe is disabled.** `STRIPE_*` variables are optional. `/payment/payment_intent` returns `410`.
 - Book invoices include title, author, language, level, genre and chapters. After `PAYMENT_CONFIRMED` or a client sync, the book is granted to the buyer's library.
 - External checkout is tied to a **classroom**. An admin must set `checkout_allowed` on the classroom. Then the teacher (owner) can set `checkout_enabled` + `price` and copy `{FRONT_BASE_URL}/checkout/{classroomId}`. Sales pages on Memobelc Page should point to that URL.
-- `POST /billing/public/checkout` with `product_type: "classroom"` is always a guest checkout (session is ignored). New buyers are created with password = CPF/CNPJ digits and `must_change_password`. Existing buyers are matched by email with no password. After payment, the buyer is enrolled in the classroom, the email is confirmed, and a receipt is sent. The JWT in the response is only for PIX polling, not app login.
+- `POST /billing/public/checkout` with `product_type: "classroom"` is always a guest checkout: only **email + CPF** (no password, no login). New buyers get a profile with password = CPF and `must_change_password`. Existing buyers are linked by email or CPF. After payment, both receive a welcome + purchase confirmation email with access instructions. PIX polling uses `/billing/public/payments/{id}/sync` with the same email and CPF.
 
 ## How access works
 

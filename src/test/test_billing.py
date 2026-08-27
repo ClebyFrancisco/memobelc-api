@@ -5,6 +5,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from src.app import mongo
+from bson import ObjectId
 from src.app.models.book_model import BookModel
 from src.app.models.coupon_model import CouponModel
 from src.app.models.entitlement_model import EntitlementModel
@@ -799,6 +800,7 @@ def test_public_classroom_checkout_enrolls_student_and_sends_receipt(mock_pay, m
     assert mock_mail.called
     sent_body = mock_mail.call_args[0][0].body
     assert payment_id in sent_body
+    assert "Bem-vindo" in sent_body
     assert "CPF" in sent_body
 
     token = body["token"]
@@ -831,3 +833,41 @@ def test_public_classroom_checkout_enrolls_student_and_sends_receipt(mock_pay, m
     assert mine.status_code == 200
     courses = mine.get_json().get("courses") or []
     assert any(item["_id"] == classroom["course_id"] for item in courses)
+
+
+@patch("src.app.services.billing_service.Asaas.verify_webhook", return_value=True)
+@patch("src.app.services.billing_service.Asaas.get_pix_qr_code", return_value={"encodedImage": "ccc==", "payload": "000201class", "expirationDate": "2026-08-28 23:59:59"})
+@patch("src.app.services.billing_service.Asaas.create_customer", return_value={"id": "cus_class_exist"})
+@patch("src.app.services.billing_service.Asaas.create_payment", return_value={"id": "pay_class_exist", "status": "PENDING", "invoiceUrl": "https://asaas.test/class"})
+def test_public_checkout_links_existing_profile_without_password(mock_pay, mock_cus, mock_pix, mock_wh, client):
+    suffix = uuid.uuid4().hex[:8]
+    _, teacher_id = _auth_user(client, f"teacher_exist_{suffix}@example.com")
+    classroom = _create_sellable_classroom(teacher_id, name=f"Turma exist {suffix}", price=80.0)
+    email = f"already_{suffix}@example.com"
+    _, user_id = _auth_user(client, email, password="keep-this-password")
+    mongo.db.users.update_one({"_id": ObjectId(user_id)}, {"$set": {"cpf_cnpj": "52998224725"}})
+    response = client.post(
+        "/billing/public/checkout",
+        data=json.dumps({
+            "product_type": "classroom",
+            "product_id": classroom["_id"],
+            "name": "Nome ignorado",
+            "email": email,
+            "billing_type": "PIX",
+            "cpf_cnpj": "52998224725",
+        }),
+        content_type="application/json",
+    )
+    assert response.status_code == 200, response.get_json()
+    body = response.get_json()
+    assert body["user_created"] is False
+    buyer = UserModel.find_by_email(email)
+    assert str(buyer._id) == user_id
+    assert check_password_hash(buyer.password, "keep-this-password")
+    assert buyer.must_change_password is False
+    sync = client.post(
+        f"/billing/public/payments/{body['payment']['_id']}/sync",
+        data=json.dumps({"email": email, "cpf_cnpj": "52998224725"}),
+        content_type="application/json",
+    )
+    assert sync.status_code == 200

@@ -435,6 +435,8 @@ class BillingService:
                     "external_reference": payload["externalReference"],
                     "invoice_description": payload["description"],
                     "product": snapshot,
+                    "user_created": bool(data.get("_user_created")),
+                    "must_change_password": bool(data.get("_must_change_password")),
                 },
             })
             if coupon:
@@ -680,13 +682,36 @@ class BillingService:
         paid_at = payment.get("paid_at") or utcnow()
         paid_label = paid_at.strftime("%d/%m/%Y %H:%M") if hasattr(paid_at, "strftime") else str(paid_at)
         try:
+            is_new = bool(
+                metadata.get("user_created")
+                or metadata.get("must_change_password")
+                or getattr(user, "must_change_password", False)
+            )
+            if is_new:
+                access_instructions = f"""
+Como acessar:
+1. Entre em {Config.FRONT_BASE_URL}/login
+2. Use este e-mail: {user.email}
+3. A senha inicial é o seu CPF (somente números)
+4. No primeiro acesso você deverá criar uma nova senha
+""".strip()
+            else:
+                access_instructions = f"""
+Como acessar:
+1. Entre em {Config.FRONT_BASE_URL}/login
+2. Use este e-mail: {user.email}
+3. Use a senha da sua conta Memobelc
+Se não lembrar, toque em "Esqueci minha senha"
+""".strip()
             msg = Message(
-                subject="Compra confirmada - Memobelc",
+                subject="Compra confirmada e boas-vindas - Memobelc",
                 recipients=[user.email],
                 sender=Config.MAIL_DEFAULT_SENDER or Config.MAIL_USERNAME,
             )
             msg.body = f"""
 Olá {user.name or ''}!
+
+Bem-vindo(a) à Memobelc!
 
 Sua compra foi confirmada.
 
@@ -696,11 +721,7 @@ Número da transação: {transaction_id}
 ID do pagamento: {provider_id}
 Data: {paid_label}
 
-Acesse a plataforma com este e-mail:
-{Config.FRONT_BASE_URL}/login
-
-Se esta foi sua primeira compra, a senha inicial é o seu CPF (somente números).
-No primeiro acesso você deverá criar uma nova senha.
+{access_instructions}
 
 O acesso à turma já está liberado na sua conta.
 
@@ -713,14 +734,73 @@ Equipe Memobelc
             current_app.logger.error(f"Failed to send purchase receipt: {exc}")
 
     @staticmethod
+    def _resolve_checkout_buyer(email, name, cpf_cnpj):
+        """Find or create the buyer profile. Never asks for a password."""
+        email = (email or "").strip().lower()
+        name = (name or "").strip()
+        by_email = UserModel.find_by_email(email)
+        by_cpf = UserModel.find_by_cpf_cnpj(cpf_cnpj)
+        if by_email and by_cpf and str(by_email._id) != str(by_cpf._id):
+            return None, {
+                "error": "Este CPF já está vinculado a outro e-mail.",
+                "code": "cpf_mismatch",
+            }, 409
+        user = by_email or by_cpf
+        if user:
+            stored_cpf = _normalize_cpf_cnpj(getattr(user, "cpf_cnpj", None))
+            if stored_cpf and stored_cpf != cpf_cnpj:
+                return None, {
+                    "error": "Este e-mail já possui outro CPF cadastrado.",
+                    "code": "cpf_mismatch",
+                }, 409
+            if not stored_cpf:
+                UserModel.set_cpf_cnpj(user._id, cpf_cnpj)
+                user.cpf_cnpj = cpf_cnpj
+            if name and not (user.name or "").strip():
+                UserModel.set_name(user._id, name)
+                user.name = name
+            return {"user": user, "created": False}, None, 200
+        if not name:
+            return None, {"error": "name is required"}, 400
+        UserModel(
+            name=name,
+            email=email,
+            password=generate_password_hash(cpf_cnpj),
+            cpf_cnpj=cpf_cnpj,
+            must_change_password=True,
+        ).save_to_db()
+        user = UserModel.find_by_email(email)
+        if not user:
+            return None, {"error": "Could not create user"}, 500
+        return {"user": user, "created": True}, None, 200
+
+    @staticmethod
+    def _guest_payment_user(payment_id, email, cpf_cnpj):
+        payment = PaymentModel.get_by_id(payment_id)
+        if not payment:
+            return None, None
+        user = UserModel.find_by_id(payment.get("user_id"))
+        if not user:
+            return None, None
+        email = (email or "").strip().lower()
+        cpf_cnpj = _normalize_cpf_cnpj(cpf_cnpj)
+        if user.email and user.email.strip().lower() != email:
+            return None, None
+        stored_cpf = _normalize_cpf_cnpj(getattr(user, "cpf_cnpj", None))
+        if stored_cpf and cpf_cnpj and stored_cpf != cpf_cnpj:
+            return None, None
+        return user, payment
+
+    @staticmethod
     def public_checkout(data):
+        data = dict(data or {})
+        data.pop("password", None)
         product_type = data.get("product_type") or "classroom"
         if product_type == "course":
             course = CourseModel.get_by_id(data.get("product_id"))
             classroom_id = (course or {}).get("classroom_id")
             if not classroom_id:
                 return {"error": "Only classroom public checkout is supported"}, 400
-            data = dict(data)
             data["product_type"] = "classroom"
             data["product_id"] = classroom_id
             product_type = "classroom"
@@ -743,47 +823,54 @@ Equipe Memobelc
         if float(product.get("price") or 0) <= 0:
             return {"error": "Classroom price is not set"}, 400
 
-        from src.app.services.auth_service import AuthService
+        buyer, error, status = BillingService._resolve_checkout_buyer(email, name, cpf_cnpj)
+        if error:
+            return error, status
+        user = buyer["user"]
+        created = buyer["created"]
+        classroom_id = product.get("_id")
+        if classroom_id and ClassroomModel.is_student(classroom_id, user._id):
+            return {
+                "granted": True,
+                "already_enrolled": True,
+                "provider": "free",
+                "product_id": product["_id"],
+                "user_created": False,
+                "must_change_password": bool(getattr(user, "must_change_password", False)),
+            }, 200
 
-        created = False
-        user = UserModel.find_by_email(email)
-        if user:
-            classroom_id = product.get("_id")
-            if classroom_id and ClassroomModel.is_student(classroom_id, user._id):
-                auth = AuthService.issue_auth_token(user)
-                return {
-                    **auth,
-                    "granted": True,
-                    "already_enrolled": True,
-                    "provider": "free",
-                    "product_id": product["_id"],
-                }, 200
-            if not getattr(user, "cpf_cnpj", None):
-                UserModel.set_cpf_cnpj(user._id, cpf_cnpj)
-        else:
-            if not name:
-                return {"error": "name is required"}, 400
-            new_user = UserModel(
-                name=name,
-                email=email,
-                password=generate_password_hash(cpf_cnpj),
-                cpf_cnpj=cpf_cnpj,
-                must_change_password=True,
-            )
-            new_user.save_to_db()
-            user = UserModel.find_by_email(email)
-            created = True
-            if not user:
-                return {"error": "Could not create user"}, 500
-
+        data["_user_created"] = created
+        data["_must_change_password"] = bool(getattr(user, "must_change_password", False) or created)
         result, status = BillingService.checkout(user, data)
         if status >= 400:
             return result, status
-        auth = AuthService.issue_auth_token(user)
-        result.update(auth)
+        from src.app.services.auth_service import AuthService
+        result.update(AuthService.issue_auth_token(user))
         result["user_created"] = created
-        result["must_change_password"] = bool(getattr(user, "must_change_password", False))
+        result["must_change_password"] = bool(getattr(user, "must_change_password", False) or created)
         return result, status
+
+    @staticmethod
+    def public_sync_payment(payment_id, data):
+        user, _payment = BillingService._guest_payment_user(
+            payment_id,
+            (data or {}).get("email"),
+            (data or {}).get("cpf_cnpj"),
+        )
+        if not user:
+            return {"error": "Payment not found"}, 404
+        return BillingService.sync_payment(user, payment_id)
+
+    @staticmethod
+    def public_get_pix_qr(payment_id, data):
+        user, _payment = BillingService._guest_payment_user(
+            payment_id,
+            (data or {}).get("email"),
+            (data or {}).get("cpf_cnpj"),
+        )
+        if not user:
+            return {"error": "Payment not found"}, 404
+        return BillingService.get_pix_qr(user, payment_id)
 
     @staticmethod
     def _revoke_one_time(payment):
