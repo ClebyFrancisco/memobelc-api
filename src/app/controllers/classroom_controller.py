@@ -67,6 +67,22 @@ class ClassroomController:
     
     
     @staticmethod
+    def get_public_classroom(classroom_id):
+        classroom = ClassroomService.get_public_classroom(classroom_id)
+        if not classroom:
+            return jsonify({'error': 'Classroom not found'}), 404
+        return jsonify(classroom), 200
+
+    @staticmethod
+    @token_required
+    def update_classroom(current_user, token, classroom_id):
+        data = request.get_json() or {}
+        result, status = ClassroomService.update_classroom(current_user, classroom_id, data)
+        if status >= 400:
+            return jsonify(result), status
+        return jsonify(result), status
+
+    @staticmethod
     @token_required
     def get_student_profile(current_user, token, classroom_id, student_id):
         if not current_user.has_role('teacher'):
@@ -135,6 +151,8 @@ classroom_blueprint.route("/get_classrooms", methods=['GET'])(ClassroomControlle
 classroom_blueprint.route("/add_user_in_classroom", methods=['POST'])(ClassroomController.add_students)
 classroom_blueprint.route("/remove_user_in_classroom", methods=['POST'])(ClassroomController.remove_user)
 classroom_blueprint.route("/generate_cards_by_subject", methods=["POST"])(ClassroomController.generate_cards_by_subject)
+classroom_blueprint.route("/public/<classroom_id>", methods=["GET"])(ClassroomController.get_public_classroom)
+classroom_blueprint.route("/<classroom_id>", methods=["PUT"])(ClassroomController.update_classroom)
 classroom_blueprint.route("/<classroom_id>/student/<student_id>/profile", methods=["GET"])(ClassroomController.get_student_profile)
 
         

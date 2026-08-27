@@ -40,6 +40,13 @@ class CourseController:
         return jsonify(result), 200
 
     @staticmethod
+    def get_public_course(course_id):
+        course = CourseService.get_public_course(course_id)
+        if not course:
+            return jsonify({'error': 'Course not found'}), 404
+        return jsonify(course), 200
+
+    @staticmethod
     @token_required
     def get_course_detail(current_user, token, course_id):
         course = CourseService.get_course_detail(
@@ -52,12 +59,38 @@ class CourseController:
     @staticmethod
     @token_required
     def update_course(current_user, token, course_id):
-        if not current_user.has_role('teacher'):
+        is_teacher = current_user.has_role('teacher')
+        is_admin = current_user.has_role('admin')
+        if not is_teacher and not is_admin:
             return jsonify({'error': 'Only teachers can update courses'}), 403
+
+        course = CourseService.get_course_detail(course_id)
+        if not course:
+            return jsonify({'error': 'Course not found'}), 404
 
         data = request.get_json() or {}
         allowed = ['name', 'description']
+        commerce_keys = ['checkout_enabled', 'price']
+        is_owner = str(course.get('teacher_id')) == str(current_user._id)
+        if is_owner or is_admin:
+            allowed = allowed + commerce_keys
+
         update_data = {k: v for k, v in data.items() if k in allowed}
+        if 'checkout_enabled' in update_data:
+            update_data['checkout_enabled'] = bool(update_data['checkout_enabled'])
+        if 'price' in update_data:
+            raw_price = update_data['price']
+            if raw_price is None or raw_price == '':
+                update_data['price'] = None
+            else:
+                try:
+                    price = float(raw_price)
+                except (TypeError, ValueError):
+                    return jsonify({'error': 'Invalid price'}), 400
+                if price < 0:
+                    return jsonify({'error': 'Invalid price'}), 400
+                update_data['price'] = price
+
         result = CourseService.update_course(course_id, update_data)
         return jsonify(result), 200
 
@@ -437,6 +470,7 @@ course_blueprint = Blueprint('course_blueprint', __name__)
 course_blueprint.route('/create', methods=['POST'])(CourseController.create_course)
 course_blueprint.route('/mine', methods=['GET'])(CourseController.get_my_courses)
 course_blueprint.route('/by_classroom/<classroom_id>', methods=['GET'])(CourseController.get_courses_by_classroom)
+course_blueprint.route('/public/<course_id>', methods=['GET'])(CourseController.get_public_course)
 course_blueprint.route('/<course_id>', methods=['GET'])(CourseController.get_course_detail)
 course_blueprint.route('/<course_id>', methods=['PUT'])(CourseController.update_course)
 course_blueprint.route('/<course_id>', methods=['DELETE'])(CourseController.delete_course)

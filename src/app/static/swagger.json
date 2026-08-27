@@ -231,6 +231,30 @@
         "responses": { "200": { "description": "OK" }, "400": { "description": "email obrigatório" } }
       }
     },
+    "/auth/change_password": {
+      "put": {
+        "tags": ["Auth"],
+        "summary": "Alterar senha (obrigatório no primeiro acesso após checkout com CPF)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [{
+          "name": "body",
+          "in": "body",
+          "schema": {
+            "type": "object",
+            "required": ["current_password", "new_password"],
+            "properties": {
+              "current_password": { "type": "string" },
+              "new_password": { "type": "string" }
+            }
+          }
+        }],
+        "responses": {
+          "200": { "description": "JWT atualizado com must_change_password=false" },
+          "400": { "description": "Senha inválida ou igual ao CPF" },
+          "401": { "description": "Senha atual incorreta" }
+        }
+      }
+    },
     "/auth/logout": {
       "post": {
         "tags": ["Auth"],
@@ -682,6 +706,44 @@
         "responses": { "200": { "description": "Sala criada" }, "401": { "description": "Apenas professor" } }
       }
     },
+    "/classroom/public/{classroom_id}": {
+      "get": {
+        "tags": ["Classroom"],
+        "summary": "Oferta pública da turma (checkout permitido pelo admin e habilitado pelo professor)",
+        "parameters": [{ "name": "classroom_id", "in": "path", "required": true, "type": "string" }],
+        "responses": {
+          "200": { "description": "Nome, preço e checkout_url" },
+          "404": { "description": "Turma inexistente ou checkout indisponível" }
+        }
+      }
+    },
+    "/classroom/{classroom_id}": {
+      "put": {
+        "tags": ["Classroom"],
+        "summary": "Atualizar turma (checkout_enabled e price pelo dono; checkout_allowed pelo admin)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          { "name": "classroom_id", "in": "path", "required": true, "type": "string" },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "checkout_allowed": { "type": "boolean" },
+                "checkout_enabled": { "type": "boolean" },
+                "price": { "type": "number" }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Turma atualizada" },
+          "403": { "description": "Sem permissão ou checkout não permitido pelo admin" }
+        }
+      }
+    },
     "/classroom/get_classrooms": {
       "get": {
         "tags": ["Classroom"],
@@ -1011,6 +1073,41 @@
         "responses": { "201": { "description": "Curso criado" }, "403": { "description": "Apenas professor" } }
       }
     },
+    "/course/public/{course_id}": {
+      "get": {
+        "tags": ["Course"],
+        "summary": "Catálogo público de um curso com checkout habilitado",
+        "parameters": [{ "name": "course_id", "in": "path", "required": true, "type": "string" }],
+        "responses": {
+          "200": { "description": "Nome, descrição, preço e checkout_url" },
+          "404": { "description": "Curso inexistente ou checkout desabilitado" }
+        }
+      }
+    },
+    "/course/{course_id}": {
+      "put": {
+        "tags": ["Course"],
+        "summary": "Atualizar curso (nome, descrição, checkout_enabled, price)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          { "name": "course_id", "in": "path", "required": true, "type": "string" },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "description": { "type": "string" },
+                "checkout_enabled": { "type": "boolean" },
+                "price": { "type": "number" }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Curso atualizado" }, "403": { "description": "Sem permissão" } }
+      }
+    },
     "/course/activity/create": {
       "post": {
         "tags": ["Course"],
@@ -1224,24 +1321,62 @@
     "/billing/checkout": {
       "post": {
         "tags": ["Billing"],
-        "summary": "Iniciar checkout Asaas (web) ou Google Play (Android)",
+        "summary": "Checkout nativo Asaas (PIX ou cartão) em web, Android e iOS",
         "security": [{ "Bearer": [] }],
         "parameters": [{
           "name": "body",
           "in": "body",
           "schema": {
             "type": "object",
-            "required": ["product_type", "product_id"],
+            "required": ["product_type", "product_id", "billing_type", "cpf_cnpj"],
             "properties": {
-              "product_type": { "type": "string", "enum": ["plan", "book", "bundle"] },
+              "product_type": { "type": "string", "enum": ["plan", "book", "bundle", "course", "classroom"] },
               "product_id": { "type": "string" },
               "platform": { "type": "string", "enum": ["web", "android", "ios"] },
-              "billing_type": { "type": "string" },
-              "coupon_code": { "type": "string" }
+              "billing_type": { "type": "string", "enum": ["PIX", "CREDIT_CARD"] },
+              "coupon_code": { "type": "string" },
+              "cpf_cnpj": { "type": "string" },
+              "credit_card": {
+                "type": "object",
+                "properties": {
+                  "holder_name": { "type": "string" },
+                  "number": { "type": "string" },
+                  "expiry_month": { "type": "string" },
+                  "expiry_year": { "type": "string" },
+                  "ccv": { "type": "string" },
+                  "postal_code": { "type": "string" },
+                  "address_number": { "type": "string" },
+                  "phone": { "type": "string" }
+                }
+              }
             }
           }
         }],
-        "responses": { "200": { "description": "URL de checkout ou SKU" } }
+        "responses": { "200": { "description": "PIX (QR + payload) ou cobrança de cartão" } }
+      }
+    },
+    "/billing/public/checkout": {
+      "post": {
+        "tags": ["Billing"],
+        "summary": "Checkout público da turma (sempre visitante). Usuário novo: senha inicial = CPF, deve alterar no primeiro acesso.",
+        "parameters": [{
+          "name": "body",
+          "in": "body",
+          "schema": {
+            "type": "object",
+            "required": ["product_type", "product_id", "email", "billing_type", "cpf_cnpj"],
+            "properties": {
+              "product_type": { "type": "string", "enum": ["classroom", "course"] },
+              "product_id": { "type": "string" },
+              "name": { "type": "string" },
+              "email": { "type": "string" },
+              "billing_type": { "type": "string", "enum": ["PIX", "CREDIT_CARD"] },
+              "cpf_cnpj": { "type": "string" },
+              "credit_card": { "type": "object" }
+            }
+          }
+        }],
+        "responses": { "200": { "description": "JWT temporário para PIX + PIX ou URL de cartão. Não faz login no app." } }
       }
     },
     "/billing/me": {
@@ -1258,6 +1393,43 @@
         "summary": "Histórico de pagamentos do usuário",
         "security": [{ "Bearer": [] }],
         "responses": { "200": { "description": "Pagamentos" } }
+      }
+    },
+    "/billing/payments/{payment_id}/sync": {
+      "post": {
+        "tags": ["Billing"],
+        "summary": "Sincronizar status de um pagamento Asaas (PIX/cartão)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [{ "name": "payment_id", "in": "path", "required": true, "type": "string" }],
+        "responses": { "200": { "description": "Status e granted" } }
+      }
+    },
+    "/billing/payments/{payment_id}/pix": {
+      "get": {
+        "tags": ["Billing"],
+        "summary": "Obter ou renovar QR Code PIX",
+        "security": [{ "Bearer": [] }],
+        "parameters": [{ "name": "payment_id", "in": "path", "required": true, "type": "string" }],
+        "responses": { "200": { "description": "encoded_image, payload e expiration_date" } }
+      }
+    },
+    "/billing/update-payment": {
+      "post": {
+        "tags": ["Billing"],
+        "summary": "Atualizar cartão da assinatura Asaas (ou manage_url legado do Play)",
+        "security": [{ "Bearer": [] }],
+        "parameters": [{
+          "name": "body",
+          "in": "body",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "cpf_cnpj": { "type": "string" },
+              "credit_card": { "type": "object" }
+            }
+          }
+        }],
+        "responses": { "200": { "description": "Cartão atualizado" } }
       }
     },
     "/billing/cancel": {
@@ -1286,7 +1458,7 @@
     "/billing/google/verify": {
       "post": {
         "tags": ["Billing"],
-        "summary": "Validar compra Google Play",
+        "summary": "Validar compra Google Play (assinaturas legadas)",
         "security": [{ "Bearer": [] }],
         "responses": { "200": { "description": "Compra validada" } }
       }
@@ -1394,6 +1566,43 @@
         "summary": "Regras de visibilidade dos serviços",
         "security": [{ "Bearer": [] }],
         "responses": { "200": { "description": "Regras" } }
+      }
+    },
+    "/admin/billing/classrooms": {
+      "get": {
+        "tags": ["AdminBilling"],
+        "summary": "Listar turmas e flags de checkout",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Turmas" } }
+      }
+    },
+    "/admin/billing/classrooms/{classroom_id}": {
+      "put": {
+        "tags": ["AdminBilling"],
+        "summary": "Permitir ou bloquear checkout da turma",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          { "name": "classroom_id", "in": "path", "required": true, "type": "string" },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "checkout_allowed": { "type": "boolean" }
+              }
+            }
+          }
+        ],
+        "responses": { "200": { "description": "Turma atualizada" } }
+      }
+    },
+    "/admin/billing/classroom-checkouts": {
+      "get": {
+        "tags": ["AdminBilling"],
+        "summary": "Histórico e comprovantes de checkout de turmas",
+        "security": [{ "Bearer": [] }],
+        "responses": { "200": { "description": "Pagamentos com comprador, turma e receipt_url" } }
       }
     }
   }

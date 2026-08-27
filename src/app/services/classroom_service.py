@@ -29,6 +29,71 @@ class ClassroomService:
         student_classrooms = [c for c in student_classrooms if c['_id'] not in teacher_ids]
 
         return {'classrooms': teacher_classrooms + student_classrooms}
+
+    @staticmethod
+    def get_public_classroom(classroom_id):
+        classroom = ClassroomModel.get_by_id(classroom_id)
+        if not classroom:
+            return None
+        if not classroom.get('checkout_allowed') or not classroom.get('checkout_enabled'):
+            return None
+        price = classroom.get('price')
+        return {
+            '_id': classroom['_id'],
+            'name': classroom.get('name'),
+            'image': classroom.get('image'),
+            'price': float(price) if price is not None else None,
+            'checkout_enabled': True,
+            'checkout_allowed': True,
+            'checkout_url': classroom.get('checkout_url'),
+        }
+
+    @staticmethod
+    def update_classroom(user, classroom_id, data):
+        classroom = ClassroomModel.get_by_id(classroom_id)
+        if not classroom:
+            return {'error': 'Classroom not found'}, 404
+
+        is_admin = user.has_role('admin')
+        is_owner = str(classroom.get('teacher')) == str(user._id)
+        if not is_admin and not is_owner:
+            return {'error': 'Unauthorized'}, 403
+
+        update_data = {}
+        if is_admin and 'checkout_allowed' in data:
+            update_data['checkout_allowed'] = bool(data.get('checkout_allowed'))
+            if not update_data['checkout_allowed']:
+                update_data['checkout_enabled'] = False
+
+        allowed_now = classroom.get('checkout_allowed')
+        if 'checkout_allowed' in update_data:
+            allowed_now = update_data['checkout_allowed']
+
+        teacher_keys = is_owner or is_admin
+        if teacher_keys:
+            if 'checkout_enabled' in data and 'checkout_enabled' not in update_data:
+                if data.get('checkout_enabled') and not allowed_now:
+                    return {'error': 'Checkout is not allowed for this classroom'}, 403
+                update_data['checkout_enabled'] = bool(data.get('checkout_enabled'))
+            if 'price' in data:
+                raw_price = data.get('price')
+                if raw_price is None or raw_price == '':
+                    update_data['price'] = None
+                else:
+                    try:
+                        price = float(raw_price)
+                    except (TypeError, ValueError):
+                        return {'error': 'Invalid price'}, 400
+                    if price < 0:
+                        return {'error': 'Invalid price'}, 400
+                    update_data['price'] = price
+            if 'name' in data and data.get('name'):
+                update_data['name'] = data.get('name')
+
+        if not update_data:
+            return classroom, 200
+        updated = ClassroomModel.update(classroom_id, update_data)
+        return updated, 200
     
     @staticmethod
     def get_student_classroom_profile(classroom_id, student_id):

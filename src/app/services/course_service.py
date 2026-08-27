@@ -71,6 +71,22 @@ class CourseService:
         return course
 
     @staticmethod
+    def get_public_course(course_id):
+        course = CourseModel.get_by_id(course_id)
+        if not course or not course.get('checkout_enabled'):
+            return None
+        price = course.get('price')
+        return {
+            '_id': course['_id'],
+            'name': course.get('name'),
+            'description': course.get('description') or '',
+            'price': float(price) if price is not None else None,
+            'checkout_enabled': True,
+            'checkout_url': course.get('checkout_url'),
+            'classroom_id': course.get('classroom_id'),
+        }
+
+    @staticmethod
     def update_course(course_id, update_data):
         CourseModel.update(course_id, update_data)
         return CourseModel.get_by_id(course_id)

@@ -13,6 +13,7 @@ from src.app.models.subscription_model import SubscriptionModel
 from src.app.models.user_model import UserModel
 from src.app.services.billing_service import BillingService
 from src.app.services.entitlement_service import EntitlementService
+from werkzeug.security import check_password_hash
 from src.app.utils.billing_utils import utcnow, invoice_description
 
 
@@ -135,14 +136,40 @@ def test_duplicate_subscription_blocked(client):
     response = client.post(
         "/billing/checkout",
         headers=user_headers,
-        data=json.dumps({"product_type": "plan", "product_id": plan["_id"], "platform": "web"}),
+        data=json.dumps({
+            "product_type": "plan",
+            "product_id": plan["_id"],
+            "platform": "web",
+            "billing_type": "PIX",
+            "cpf_cnpj": "52998224725",
+        }),
     )
     assert response.status_code == 409
 
 
+def test_checkout_requires_pix_or_card(client):
+    suffix = uuid.uuid4().hex[:8]
+    admin_headers, _ = _auth_user(client, f"admin_bt_{suffix}@example.com", admin=True)
+    user_headers, _ = _auth_user(client, f"user_bt_{suffix}@example.com")
+    plan = _create_plan(admin_headers, client, name=f"BT {suffix}")
+    response = client.post(
+        "/billing/checkout",
+        headers=user_headers,
+        data=json.dumps({
+            "product_type": "plan",
+            "product_id": plan["_id"],
+            "cpf_cnpj": "52998224725",
+        }),
+    )
+    assert response.status_code == 400
+    assert response.get_json()["code"] == "billing_type_required"
+
+
+@patch("src.app.services.billing_service.Asaas.get_pix_qr_code", return_value={"encodedImage": "aaa==", "payload": "00020126", "expirationDate": "2026-08-28 23:59:59"})
+@patch("src.app.services.billing_service.Asaas.list_subscription_payments", return_value={"data": [{"id": "pay_1", "status": "PENDING", "invoiceUrl": "https://asaas.test/pay"}]})
 @patch("src.app.services.billing_service.Asaas.create_customer", return_value={"id": "cus_1"})
 @patch("src.app.services.billing_service.Asaas.create_subscription", return_value={"id": "sub_1", "invoiceUrl": "https://asaas.test/pay"})
-def test_asaas_checkout_creates_pending_subscription(mock_sub, mock_cus, client):
+def test_asaas_checkout_creates_pending_subscription(mock_sub, mock_cus, mock_list, mock_pix, client):
     suffix = uuid.uuid4().hex[:8]
     admin_headers, _ = _auth_user(client, f"admin_a_{suffix}@example.com", admin=True)
     user_headers, user_id = _auth_user(client, f"user_a_{suffix}@example.com")
@@ -150,15 +177,26 @@ def test_asaas_checkout_creates_pending_subscription(mock_sub, mock_cus, client)
     response = client.post(
         "/billing/checkout",
         headers=user_headers,
-        data=json.dumps({"product_type": "plan", "product_id": plan["_id"], "platform": "web"}),
+        data=json.dumps({
+            "product_type": "plan",
+            "product_id": plan["_id"],
+            "platform": "web",
+            "billing_type": "PIX",
+            "cpf_cnpj": "52998224725",
+        }),
     )
     assert response.status_code == 200, response.get_json()
     body = response.get_json()
     assert body["provider"] == "asaas"
-    assert body["checkout_url"] == "https://asaas.test/pay"
+    assert body["billing_type"] == "PIX"
+    assert body["pix"]["payload"] == "00020126"
+    assert body["payment"]["status"] == "pending"
     stored = SubscriptionModel.get_active_for_user(user_id)
     assert stored is not None
     assert stored["provider_subscription_id"] == "sub_1"
+    pix = client.get(f"/billing/payments/{body['payment']['_id']}/pix", headers=user_headers)
+    assert pix.status_code == 200
+    assert pix.get_json()["pix"]["payload"] == "00020126"
 
 
 def test_webhook_idempotency_and_entitlements(client):
@@ -433,18 +471,74 @@ def test_entitlements_me_default_allow(client, auth_headers):
     assert services["home"]["action"] == "allow"
 
 
-def test_ios_checkout_blocked(client):
+@patch("src.app.services.billing_service.Asaas.get_pix_qr_code", return_value={"encodedImage": "aaa==", "payload": "00020126", "expirationDate": "2026-08-28 23:59:59"})
+@patch("src.app.services.billing_service.Asaas.list_subscription_payments")
+@patch("src.app.services.billing_service.Asaas.create_customer", return_value={"id": "cus_ios"})
+@patch("src.app.services.billing_service.Asaas.create_subscription")
+def test_ios_and_android_checkout_use_asaas(mock_sub, mock_cus, mock_list, mock_pix, client):
+    mock_sub.side_effect = lambda payload: {"id": f"sub_{uuid.uuid4().hex[:8]}", "invoiceUrl": "https://asaas.test/pay"}
+    mock_list.side_effect = lambda sub_id: {"data": [{"id": f"pay_{uuid.uuid4().hex[:8]}", "status": "PENDING", "invoiceUrl": "https://asaas.test/pay"}]}
     suffix = uuid.uuid4().hex[:8]
     admin_headers, _ = _auth_user(client, f"admin_i_{suffix}@example.com", admin=True)
-    user_headers, _ = _auth_user(client, f"user_i_{suffix}@example.com")
     plan = _create_plan(admin_headers, client, name=f"iOS {suffix}")
+    for platform in ("ios", "android"):
+        other_headers, _ = _auth_user(client, f"user_{platform}_{suffix}@example.com")
+        response = client.post(
+            "/billing/checkout",
+            headers=other_headers,
+            data=json.dumps({
+                "product_type": "plan",
+                "product_id": plan["_id"],
+                "platform": platform,
+                "billing_type": "PIX",
+                "cpf_cnpj": "52998224725",
+            }),
+        )
+        assert response.status_code == 200, response.get_json()
+        body = response.get_json()
+        assert body["provider"] == "asaas"
+        assert body.get("sku") is None
+        assert body["pix"]["payload"] == "00020126"
+
+
+_CARD = {
+    "holder_name": "Ada Lovelace",
+    "number": "4111111111111111",
+    "expiry_month": "12",
+    "expiry_year": "2030",
+    "ccv": "123",
+    "postal_code": "01310100",
+    "address_number": "100",
+    "phone": "11999999999",
+}
+
+
+@patch("src.app.services.billing_service.Asaas.list_subscription_payments", return_value={"data": [{"id": "pay_card", "status": "PENDING", "invoiceUrl": "https://asaas.test/card"}]})
+@patch("src.app.services.billing_service.Asaas.create_customer", return_value={"id": "cus_card"})
+@patch("src.app.services.billing_service.Asaas.create_subscription", return_value={"id": "sub_card", "status": "PENDING", "invoiceUrl": "https://asaas.test/card"})
+def test_card_checkout_returns_asaas_hosted_url(mock_sub, mock_cus, mock_list, client):
+    suffix = uuid.uuid4().hex[:8]
+    admin_headers, _ = _auth_user(client, f"admin_card_{suffix}@example.com", admin=True)
+    user_headers, user_id = _auth_user(client, f"user_card_{suffix}@example.com")
+    plan = _create_plan(admin_headers, client, name=f"Card {suffix}")
     response = client.post(
         "/billing/checkout",
         headers=user_headers,
-        data=json.dumps({"product_type": "plan", "product_id": plan["_id"], "platform": "ios"}),
+        data=json.dumps({
+            "product_type": "plan",
+            "product_id": plan["_id"],
+            "platform": "web",
+            "billing_type": "CREDIT_CARD",
+            "cpf_cnpj": "52998224725",
+        }),
     )
-    assert response.status_code == 400
-    assert response.get_json()["code"] == "ios_use_web"
+    assert response.status_code == 200, response.get_json()
+    body = response.get_json()
+    assert body["provider"] == "asaas"
+    assert body["granted"] is False
+    assert body["checkout_url"] == "https://asaas.test/card"
+    entitlements = EntitlementModel.list_active_for_user(user_id)
+    assert not any(item["type"] == "plan" for item in entitlements)
 
 
 def _create_paid_book(**overrides):
@@ -485,9 +579,10 @@ def test_invoice_description_includes_book_fields():
 
 
 @patch("src.app.services.billing_service.Asaas.verify_webhook", return_value=True)
+@patch("src.app.services.billing_service.Asaas.get_pix_qr_code", return_value={"encodedImage": "bbb==", "payload": "00020199", "expirationDate": "2026-08-28 23:59:59"})
 @patch("src.app.services.billing_service.Asaas.create_customer", return_value={"id": "cus_book"})
-@patch("src.app.services.billing_service.Asaas.create_payment", return_value={"id": "pay_book_1", "invoiceUrl": "https://asaas.test/book"})
-def test_book_asaas_checkout_and_webhook_grants_access(mock_pay, mock_cus, mock_wh, client):
+@patch("src.app.services.billing_service.Asaas.create_payment", return_value={"id": "pay_book_1", "status": "PENDING", "invoiceUrl": "https://asaas.test/book"})
+def test_book_asaas_checkout_and_webhook_grants_access(mock_pay, mock_cus, mock_pix, mock_wh, client):
     suffix = uuid.uuid4().hex[:8]
     user_headers, user_id = _auth_user(client, f"user_book_{suffix}@example.com")
     book = _create_paid_book(titulo=f"Livro {suffix}")
@@ -498,13 +593,14 @@ def test_book_asaas_checkout_and_webhook_grants_access(mock_pay, mock_cus, mock_
             "product_type": "book",
             "product_id": book["_id"],
             "platform": "web",
+            "billing_type": "PIX",
             "cpf_cnpj": "52998224725",
         }),
     )
     assert response.status_code == 200, response.get_json()
     body = response.get_json()
     assert body["provider"] == "asaas"
-    assert body["checkout_url"] == "https://asaas.test/book"
+    assert body["pix"]["payload"] == "00020199"
     sent = mock_pay.call_args[0][0]
     assert book["titulo"] in sent["description"]
     assert "Autor:" in sent["description"] or book.get("autor", "Maria Silva") in sent["description"]
@@ -532,3 +628,206 @@ def test_book_asaas_checkout_and_webhook_grants_access(mock_pay, mock_cus, mock_
     synced = client.post(f"/billing/payments/{payment_id}/sync", headers=user_headers)
     assert synced.status_code == 200
     assert synced.get_json()["granted"] is True
+
+
+def _create_sellable_classroom(teacher_id, **overrides):
+    from bson import ObjectId
+    from src.app.models.course_model import CourseModel
+
+    collection_id = mongo.db.collections.insert_one({
+        "name": "Course collection",
+        "decks": [],
+        "user_id": ObjectId(teacher_id),
+    }).inserted_id
+    payload = {
+        "name": "Turma checkout",
+        "teacher": ObjectId(teacher_id),
+        "collection": collection_id,
+        "students": [],
+        "guests": [],
+        "checkout_allowed": True,
+        "checkout_enabled": True,
+        "price": 97.0,
+        "created_at": utcnow(),
+        "updated_at": utcnow(),
+    }
+    payload.update(overrides)
+    classroom_id = mongo.db.classrooms.insert_one(payload).inserted_id
+    course = CourseModel(
+        name="Curso da turma",
+        description="Conteúdo",
+        classroom_id=str(classroom_id),
+        teacher_id=teacher_id,
+    )
+    course.save_to_db()
+    from src.app.models.classroom_model import ClassroomModel
+    classroom = ClassroomModel.get_by_id(str(classroom_id))
+    classroom["course_id"] = course._id
+    return classroom
+
+
+def test_teacher_cannot_enable_checkout_without_admin(client):
+    suffix = uuid.uuid4().hex[:8]
+    teacher_headers, teacher_id = _auth_user(client, f"teacher_deny_{suffix}@example.com")
+    mongo.db.users.update_one({"_id": __import__("bson").ObjectId(teacher_id)}, {"$set": {"roles": ["user", "teacher"], "role": "teacher"}})
+    classroom = _create_sellable_classroom(teacher_id, checkout_allowed=False, checkout_enabled=False, price=None)
+    denied = client.put(
+        f"/classroom/{classroom['_id']}",
+        headers=teacher_headers,
+        data=json.dumps({"checkout_enabled": True, "price": 120}),
+    )
+    assert denied.status_code == 403
+    missing = client.get(f"/classroom/public/{classroom['_id']}")
+    assert missing.status_code == 404
+
+
+def test_admin_allows_classroom_checkout_and_teacher_enables(client):
+    suffix = uuid.uuid4().hex[:8]
+    admin_headers, _ = _auth_user(client, f"admin_ck_{suffix}@example.com", admin=True)
+    teacher_headers, teacher_id = _auth_user(client, f"teacher_ok_{suffix}@example.com")
+    mongo.db.users.update_one({"_id": __import__("bson").ObjectId(teacher_id)}, {"$set": {"roles": ["user", "teacher"], "role": "teacher"}})
+    classroom = _create_sellable_classroom(teacher_id, checkout_allowed=False, checkout_enabled=False, price=None)
+    allowed = client.put(
+        f"/admin/billing/classrooms/{classroom['_id']}",
+        headers=admin_headers,
+        data=json.dumps({"checkout_allowed": True}),
+    )
+    assert allowed.status_code == 200, allowed.get_json()
+    enabled = client.put(
+        f"/classroom/{classroom['_id']}",
+        headers=teacher_headers,
+        data=json.dumps({"checkout_enabled": True, "price": 120}),
+    )
+    assert enabled.status_code == 200, enabled.get_json()
+    public = client.get(f"/classroom/public/{classroom['_id']}")
+    assert public.status_code == 200
+    body = public.get_json()
+    assert body["price"] == 120
+    assert body["checkout_url"].endswith(f"/checkout/{classroom['_id']}")
+
+
+def test_authenticated_classroom_checkout_rejected_when_disabled(client):
+    suffix = uuid.uuid4().hex[:8]
+    _, teacher_id = _auth_user(client, f"teacher_off_{suffix}@example.com")
+    user_headers, _ = _auth_user(client, f"buyer_off_{suffix}@example.com")
+    classroom = _create_sellable_classroom(teacher_id, checkout_enabled=False)
+    response = client.post(
+        "/billing/checkout",
+        headers=user_headers,
+        data=json.dumps({
+            "product_type": "classroom",
+            "product_id": classroom["_id"],
+            "billing_type": "PIX",
+            "cpf_cnpj": "52998224725",
+        }),
+    )
+    assert response.status_code == 400
+
+
+@patch("src.app.services.billing_service.mail.send")
+@patch("src.app.services.billing_service.Asaas.verify_webhook", return_value=True)
+@patch("src.app.services.billing_service.Asaas.get_pix_qr_code", return_value={"encodedImage": "ccc==", "payload": "000201class", "expirationDate": "2026-08-28 23:59:59"})
+@patch("src.app.services.billing_service.Asaas.create_customer", return_value={"id": "cus_class"})
+@patch("src.app.services.billing_service.Asaas.create_payment", return_value={"id": "pay_class_1", "status": "PENDING", "invoiceUrl": "https://asaas.test/class"})
+def test_public_classroom_checkout_enrolls_student_and_sends_receipt(mock_pay, mock_cus, mock_pix, mock_wh, mock_mail, client):
+    suffix = uuid.uuid4().hex[:8]
+    _, teacher_id = _auth_user(client, f"teacher_ck_{suffix}@example.com")
+    classroom = _create_sellable_classroom(teacher_id, name=f"Turma {suffix}", price=97.0)
+    from bson import ObjectId
+    module_id = mongo.db.course_modules.insert_one({
+        "name": "Módulo 1",
+        "order": 0,
+        "course_id": ObjectId(classroom["course_id"]),
+        "scheduled_at": None,
+        "created_at": utcnow(),
+        "updated_at": utcnow(),
+    }).inserted_id
+    mongo.db.lessons.insert_one({
+        "title": "Aula 1",
+        "video_url": "",
+        "video_type": "youtube",
+        "description": "",
+        "order": 0,
+        "module_id": module_id,
+        "course_id": ObjectId(classroom["course_id"]),
+        "visible": True,
+        "scheduled_at": None,
+        "created_at": utcnow(),
+        "updated_at": utcnow(),
+    })
+    email = f"buyer_ck_{suffix}@example.com"
+    response = client.post(
+        "/billing/public/checkout",
+        data=json.dumps({
+            "product_type": "classroom",
+            "product_id": classroom["_id"],
+            "name": "Aluno Novo",
+            "email": email,
+            "billing_type": "PIX",
+            "cpf_cnpj": "52998224725",
+        }),
+        content_type="application/json",
+    )
+    assert response.status_code == 200, response.get_json()
+    body = response.get_json()
+    assert body["token"]
+    assert body["user_created"] is True
+    assert body["pix"]["payload"] == "000201class"
+    buyer = UserModel.find_by_email(email)
+    assert buyer is not None
+    assert buyer.must_change_password is True
+    assert check_password_hash(buyer.password, "52998224725")
+    payment_id = body["payment"]["_id"]
+
+    webhook = client.post("/billing/asaas/webhook", json={
+        "id": f"evt_class_{suffix}",
+        "event": "PAYMENT_CONFIRMED",
+        "payment": {
+            "id": "pay_class_1",
+            "value": 97.0,
+            "billingType": "PIX",
+            "invoiceUrl": "https://asaas.test/class",
+            "externalReference": f"classroom:{buyer._id}:{classroom['_id']}",
+        },
+    })
+    assert webhook.status_code == 200
+    from src.app.models.classroom_model import ClassroomModel
+    assert ClassroomModel.is_student(classroom["_id"], buyer._id)
+    entitlements = EntitlementModel.list_active_for_user(buyer._id)
+    assert any(item["type"] == "classroom" and item["resource_id"] == classroom["_id"] for item in entitlements)
+    assert UserModel.verify_is_confirmed(email) is True
+    assert mock_mail.called
+    sent_body = mock_mail.call_args[0][0].body
+    assert payment_id in sent_body
+    assert "CPF" in sent_body
+
+    token = body["token"]
+    rejected = client.put(
+        "/auth/change_password",
+        data=json.dumps({
+            "current_password": "52998224725",
+            "new_password": "52998224725",
+        }),
+        content_type="application/json",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert rejected.status_code == 400
+    changed = client.put(
+        "/auth/change_password",
+        data=json.dumps({
+            "current_password": "52998224725",
+            "new_password": "newpass123",
+        }),
+        content_type="application/json",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert changed.status_code == 200, changed.get_json()
+    assert changed.get_json()["must_change_password"] is False
+    buyer = UserModel.find_by_email(email)
+    assert buyer.must_change_password is False
+    assert check_password_hash(buyer.password, "newpass123")
+
+    mine = client.get("/course/mine", headers={"Authorization": f"Bearer {token}"})
+    assert mine.status_code == 200
+    courses = mine.get_json().get("courses") or []
+    assert any(item["_id"] == classroom["course_id"] for item in courses)

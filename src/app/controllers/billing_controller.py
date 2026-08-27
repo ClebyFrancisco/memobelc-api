@@ -6,11 +6,26 @@ from src.app.middlewares.token_required import token_required
 from src.app.services.billing_service import BillingService
 
 
+def _client_ip():
+    forwarded = request.headers.get("X-Forwarded-For") or ""
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.remote_addr or "127.0.0.1"
+
+
 class BillingController:
+    @staticmethod
+    def public_checkout():
+        data = request.get_json() or {}
+        data["_remote_ip"] = _client_ip()
+        payload, status = BillingService.public_checkout(data)
+        return jsonify(payload), status
+
     @staticmethod
     @token_required
     def checkout(current_user, token):
         data = request.get_json() or {}
+        data["_remote_ip"] = _client_ip()
         payload, status = BillingService.checkout(current_user, data)
         return jsonify(payload), status
 
@@ -32,6 +47,12 @@ class BillingController:
 
     @staticmethod
     @token_required
+    def pix_qr(current_user, token, payment_id):
+        payload, status = BillingService.get_pix_qr(current_user, payment_id)
+        return jsonify(payload), status
+
+    @staticmethod
+    @token_required
     def cancel(current_user, token):
         payload, status = BillingService.cancel_mine(current_user)
         return jsonify(payload), status
@@ -49,7 +70,9 @@ class BillingController:
     @staticmethod
     @token_required
     def update_payment(current_user, token):
-        payload, status = BillingService.update_payment_method(current_user)
+        data = request.get_json(silent=True) or {}
+        data["_remote_ip"] = _client_ip()
+        payload, status = BillingService.update_payment_method(current_user, data)
         return jsonify(payload), status
 
     @staticmethod
@@ -74,10 +97,12 @@ class BillingController:
 
 
 billing_blueprint = Blueprint("billing_blueprint", __name__)
+billing_blueprint.route("/public/checkout", methods=["POST"])(BillingController.public_checkout)
 billing_blueprint.route("/checkout", methods=["POST"])(BillingController.checkout)
 billing_blueprint.route("/me", methods=["GET"])(BillingController.me)
 billing_blueprint.route("/payments", methods=["GET"])(BillingController.payments)
 billing_blueprint.route("/payments/<payment_id>/sync", methods=["POST"])(BillingController.sync_payment)
+billing_blueprint.route("/payments/<payment_id>/pix", methods=["GET"])(BillingController.pix_qr)
 billing_blueprint.route("/cancel", methods=["POST"])(BillingController.cancel)
 billing_blueprint.route("/change-plan", methods=["POST"])(BillingController.change_plan)
 billing_blueprint.route("/update-payment", methods=["POST"])(BillingController.update_payment)

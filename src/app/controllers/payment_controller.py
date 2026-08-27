@@ -8,7 +8,7 @@ class PaymentController:
     @token_required
     def create_subscription(current_user, token):
         return jsonify({
-            "error": "Stripe checkout is disabled. Use /billing/checkout with Asaas or Google Play.",
+            "error": "Stripe checkout is disabled. Use /billing/checkout with Asaas.",
             "code": "stripe_disabled",
         }), 410
 

@@ -20,6 +20,7 @@ class UserModel:
         self.asaas_customer_id = asaas_customer_id
         self.cpf_cnpj = kwargs.get("cpf_cnpj")
         self.is_confirmed = kwargs.get("is_confirmed", False)
+        self.must_change_password = bool(kwargs.get("must_change_password", False))
         self.roles = UserModel.normalize_roles(role=role, roles=roles)
         self.role = UserModel.primary_role(self.roles)
 
@@ -69,6 +70,8 @@ class UserModel:
             "asaas_customer_id": self.asaas_customer_id,
             "role": self.role,
             "roles": self.roles,
+            "must_change_password": bool(self.must_change_password),
+            "cpf_cnpj": self.cpf_cnpj,
         }
         result = mongo.db.users.insert_one(user_data)
         self._id = str(result.inserted_id)
@@ -212,7 +215,7 @@ class UserModel:
             
             mongo.db.users.update_one(
                 {"_id": ObjectId(user_id)},
-                {"$set": {'password': new_password}}
+                {"$set": {'password': new_password, 'must_change_password': False}}
             )
             return True
         

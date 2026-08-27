@@ -59,9 +59,11 @@ VISIBILITY_ACTIONS = (
 
 AUDIENCES = ("everyone", "non_subscribers", "subscribers", "plans", "manual")
 SALE_MODES = ("separate", "plans_only", "both")
-PRODUCT_TYPES = ("plan", "book", "bundle")
+PRODUCT_TYPES = ("plan", "book", "bundle", "course", "classroom")
 PROVIDERS = ("asaas", "google_play", "manual", "external")
 GRANT_SOURCES = ("subscription", "purchase", "manual", "external")
+NATIVE_BILLING_TYPES = ("PIX", "CREDIT_CARD")
+ASAAS_PAID_STATUSES = ("CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH")
 
 GRACE_HOURS = 48
 
@@ -185,6 +187,16 @@ def invoice_description(product_type, product):
         parts.append(f"Livros: {len(book_ids)}")
         parts.append(f"ID: {product.get('_id')}")
         return " | ".join(parts)[:500]
+    if product_type == "course":
+        parts = [f"Curso: {product.get('name') or 'Sem nome'}"]
+        if product.get("description"):
+            parts.append(str(product.get("description"))[:120])
+        parts.append(f"ID: {product.get('_id')}")
+        return " | ".join(parts)[:500]
+    if product_type == "classroom":
+        parts = [f"Turma: {product.get('name') or 'Sem nome'}"]
+        parts.append(f"ID: {product.get('_id')}")
+        return " | ".join(parts)[:500]
     return (product.get("name") or product.get("titulo") or str(product.get("_id") or ""))[:500]
 
 
@@ -207,5 +219,18 @@ def product_snapshot(product_type, product):
             "description": product.get("description"),
             "price": product.get("price"),
             "book_ids": product.get("book_ids") or [],
+        }
+    if product_type == "course":
+        return {
+            "name": product.get("name"),
+            "description": product.get("description"),
+            "price": product.get("price"),
+            "classroom_id": product.get("classroom_id"),
+        }
+    if product_type == "classroom":
+        return {
+            "name": product.get("name"),
+            "price": product.get("price"),
+            "classroom_id": product.get("_id"),
         }
     return {"name": product.get("name"), "price": product.get("price")}

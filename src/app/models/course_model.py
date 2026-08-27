@@ -1,7 +1,9 @@
 import re
 from bson import ObjectId
+from bson.errors import InvalidId
 from datetime import datetime, timezone
 from src.app import mongo
+from src.app.config import Config
 
 BLANK_RE = re.compile(r'_{3,}')
 
@@ -10,16 +12,35 @@ def count_blanks(text):
     return len(BLANK_RE.findall(text or ''))
 
 
+def _parse_price(value):
+    if value is None or value == '':
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 class CourseModel:
     def __init__(self, _id=None, name=None, description=None, classroom_id=None,
-                 teacher_id=None, created_at=None, updated_at=None, **kwargs):
+                 teacher_id=None, created_at=None, updated_at=None,
+                 checkout_enabled=False, price=None, **kwargs):
         self._id = str(_id) if _id else None
         self.name = name
         self.description = description or ''
         self.classroom_id = classroom_id
         self.teacher_id = teacher_id
+        self.checkout_enabled = bool(checkout_enabled)
+        self.price = _parse_price(price)
         self.created_at = created_at or datetime.now(timezone.utc)
         self.updated_at = updated_at or datetime.now(timezone.utc)
+
+    @staticmethod
+    def build_checkout_url(course_id):
+        if not course_id:
+            return None
+        base = str(getattr(Config, 'FRONT_BASE_URL', '') or '').rstrip('/')
+        return f'{base}/checkout/{course_id}' if base else f'/checkout/{course_id}'
 
     def save_to_db(self):
         data = {
@@ -27,6 +48,8 @@ class CourseModel:
             'description': self.description,
             'classroom_id': ObjectId(self.classroom_id),
             'teacher_id': ObjectId(self.teacher_id),
+            'checkout_enabled': bool(self.checkout_enabled),
+            'price': self.price,
             'created_at': self.created_at,
             'updated_at': self.updated_at,
         }
@@ -41,13 +64,19 @@ class CourseModel:
             'description': self.description,
             'classroom_id': str(self.classroom_id) if self.classroom_id else None,
             'teacher_id': str(self.teacher_id) if self.teacher_id else None,
+            'checkout_enabled': bool(self.checkout_enabled),
+            'price': self.price,
+            'checkout_url': CourseModel.build_checkout_url(self._id),
             'created_at': self.created_at,
             'updated_at': self.updated_at,
         }
 
     @staticmethod
     def get_by_id(course_id):
-        doc = mongo.db.courses.find_one({'_id': ObjectId(course_id)})
+        try:
+            doc = mongo.db.courses.find_one({'_id': ObjectId(course_id)})
+        except (InvalidId, TypeError):
+            return None
         if doc:
             return CourseModel(**doc).to_dict()
         return None

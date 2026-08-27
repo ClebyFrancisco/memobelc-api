@@ -1,15 +1,26 @@
 import random
 from bson import ObjectId
+from bson.errors import InvalidId
 from datetime import datetime, timedelta, timezone
 from src.app import mongo
+from src.app.config import Config
 from .user_model import UserModel
 from .user_progress_model import UserProgressModel
 from .deck_model import DeckModel
 from .classroom_membership_model import ClassroomMembershipModel
 
 
+def _parse_price(value):
+    if value is None or value == '':
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 class ClassroomModel:
-    def __init__(self, _id=None, teacher=None,  created_at=None, updated_at=None, students=None, guests=None, name=None, collection=None, collection_data=None, students_data=None, **kwargs):
+    def __init__(self, _id=None, teacher=None,  created_at=None, updated_at=None, students=None, guests=None, name=None, collection=None, collection_data=None, students_data=None, checkout_allowed=False, checkout_enabled=False, price=None, **kwargs):
         self._id = str(_id) if _id else None
         self.name = name
         self.teacher = teacher
@@ -18,8 +29,18 @@ class ClassroomModel:
         self.collection = collection
         self.collection_data = collection_data
         self.students_data = students_data
+        self.checkout_allowed = bool(checkout_allowed)
+        self.checkout_enabled = bool(checkout_enabled)
+        self.price = _parse_price(price)
         self.created_at = created_at or datetime.now(timezone.utc)
         self.updated_at = updated_at or datetime.now(timezone.utc)
+
+    @staticmethod
+    def build_checkout_url(classroom_id):
+        if not classroom_id:
+            return None
+        base = str(getattr(Config, 'FRONT_BASE_URL', '') or '').rstrip('/')
+        return f'{base}/checkout/{classroom_id}' if base else f'/checkout/{classroom_id}'
         
     def save_to_db(self):
         class_data = {
@@ -28,7 +49,10 @@ class ClassroomModel:
             'collection': ObjectId(self.collection),
             'created_at': self.created_at,
             'updated_at': self.updated_at,
-            'students': self.students
+            'students': self.students,
+            'checkout_allowed': bool(self.checkout_allowed),
+            'checkout_enabled': bool(self.checkout_enabled),
+            'price': self.price,
         }
         
         result = mongo.db.classrooms.insert_one(class_data)
@@ -104,9 +128,13 @@ class ClassroomModel:
 
     @staticmethod
     def get_by_id(classroom_id):
+        try:
+            match_id = ObjectId(classroom_id)
+        except (InvalidId, TypeError):
+            return None
         
         pipeline = [
-            {"$match": {"_id": ObjectId(classroom_id)}},
+            {"$match": {"_id": match_id}},
             {
                 "$lookup": {
                     "from": "collections",
@@ -139,6 +167,55 @@ class ClassroomModel:
             
         return classroom
     
+    @staticmethod
+    def is_student(classroom_id, user_id):
+        if not classroom_id or not user_id:
+            return False
+        try:
+            doc = mongo.db.classrooms.find_one(
+                {'_id': ObjectId(classroom_id), 'students': ObjectId(user_id)},
+                {'_id': 1},
+            )
+        except Exception:
+            return False
+        return doc is not None
+
+    @staticmethod
+    def update(classroom_id, update_data):
+        update_data = dict(update_data or {})
+        update_data['updated_at'] = datetime.now(timezone.utc)
+        mongo.db.classrooms.update_one({'_id': ObjectId(classroom_id)}, {'$set': update_data})
+        return ClassroomModel.get_by_id(classroom_id)
+
+    @staticmethod
+    def list_all():
+        pipeline = [
+            {
+                '$lookup': {
+                    'from': 'users',
+                    'localField': 'teacher',
+                    'foreignField': '_id',
+                    'as': 'teacher_data',
+                }
+            },
+            {
+                '$unwind': {
+                    'path': '$teacher_data',
+                    'preserveNullAndEmptyArrays': True,
+                }
+            },
+            {'$sort': {'created_at': -1}},
+        ]
+        docs = list(mongo.db.classrooms.aggregate(pipeline))
+        result = []
+        for doc in docs:
+            item = ClassroomModel(**doc).to_dict()
+            teacher = doc.get('teacher_data') or {}
+            item['teacher_name'] = teacher.get('name')
+            item['teacher_email'] = teacher.get('email')
+            result.append(item)
+        return result
+
     @staticmethod
     def add_students(classroom_id, user_id):
         
@@ -208,4 +285,8 @@ class ClassroomModel:
             'collection': str(self.collection),
             'image': (self.collection_data or {}).get('image'),
             'decks': [str(item) for item in (self.collection_data or {}).get('decks') or []],
+            'checkout_allowed': bool(self.checkout_allowed),
+            'checkout_enabled': bool(self.checkout_enabled),
+            'price': self.price,
+            'checkout_url': ClassroomModel.build_checkout_url(self._id),
         }

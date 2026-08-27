@@ -4,11 +4,13 @@ from flask import Blueprint, jsonify, request
 
 from src.app.middlewares.token_required import token_required
 from src.app.models.billing_support_model import AuditLogModel, ExternalSaleModel
+from src.app.models.classroom_model import ClassroomModel
 from src.app.models.entitlement_model import EntitlementModel
 from src.app.models.payment_model import PaymentModel
 from src.app.models.service_access_model import ServiceAccessModel
 from src.app.models.subscription_model import SubscriptionModel
 from src.app.services.billing_service import BillingService
+from src.app.services.classroom_service import ClassroomService
 from src.app.services.entitlement_service import EntitlementService
 from src.app.utils.billing_utils import SERVICE_KEYS, VISIBILITY_ACTIONS, AUDIENCES
 
@@ -130,6 +132,36 @@ class AdminBillingController:
 
     @staticmethod
     @token_required
+    def list_classrooms(current_user, token):
+        if not current_user.has_role("admin"):
+            return jsonify({"error": "Unauthorized"}), 403
+        return jsonify({"classrooms": ClassroomModel.list_all()}), 200
+
+    @staticmethod
+    @token_required
+    def update_classroom_checkout(current_user, token, classroom_id):
+        if not current_user.has_role("admin"):
+            return jsonify({"error": "Unauthorized"}), 403
+        data = request.get_json() or {}
+        result, status = ClassroomService.update_classroom(current_user, classroom_id, data)
+        if status >= 400:
+            return jsonify(result), status
+        return jsonify(result), status
+
+    @staticmethod
+    @token_required
+    def list_classroom_checkouts(current_user, token):
+        if not current_user.has_role("admin"):
+            return jsonify({"error": "Unauthorized"}), 403
+        payload = BillingService.admin_classroom_checkouts(
+            request.args,
+            skip=request.args.get("skip", 0),
+            limit=request.args.get("limit", 50),
+        )
+        return jsonify(payload), 200
+
+    @staticmethod
+    @token_required
     def audit_logs(current_user, token):
         if not current_user.has_role("admin"):
             return jsonify({"error": "Unauthorized"}), 403
@@ -151,4 +183,7 @@ admin_billing_blueprint.route("/external-sales", methods=["GET"])(AdminBillingCo
 admin_billing_blueprint.route("/external-sales", methods=["POST"])(AdminBillingController.external_sale)
 admin_billing_blueprint.route("/access", methods=["GET"])(AdminBillingController.list_access_rules)
 admin_billing_blueprint.route("/access/<string:service_key>", methods=["PUT"])(AdminBillingController.update_access_rule)
+admin_billing_blueprint.route("/classrooms", methods=["GET"])(AdminBillingController.list_classrooms)
+admin_billing_blueprint.route("/classrooms/<string:classroom_id>", methods=["PUT"])(AdminBillingController.update_classroom_checkout)
+admin_billing_blueprint.route("/classroom-checkouts", methods=["GET"])(AdminBillingController.list_classroom_checkouts)
 admin_billing_blueprint.route("/audit", methods=["GET"])(AdminBillingController.audit_logs)

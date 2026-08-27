@@ -135,6 +135,30 @@ class EntitlementService:
         return entitlement
 
     @staticmethod
+    def grant_course(user_id, course_id, source="purchase", source_id=None, granted_by=None, notes=""):
+        return EntitlementModel.grant({
+            "user_id": user_id,
+            "type": "course",
+            "resource_id": course_id,
+            "source": source,
+            "source_id": source_id,
+            "granted_by": granted_by,
+            "notes": notes,
+        })
+
+    @staticmethod
+    def grant_classroom(user_id, classroom_id, source="purchase", source_id=None, granted_by=None, notes=""):
+        return EntitlementModel.grant({
+            "user_id": user_id,
+            "type": "classroom",
+            "resource_id": classroom_id,
+            "source": source,
+            "source_id": source_id,
+            "granted_by": granted_by,
+            "notes": notes,
+        })
+
+    @staticmethod
     def grant_plan_manual(user_id, plan_id, granted_by=None, notes=""):
         plan = PlanModel.get_by_id(plan_id)
         if not plan:

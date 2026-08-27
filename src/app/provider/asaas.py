@@ -1,6 +1,6 @@
 """Asaas HTTP client (sandbox or production)."""
 
-from datetime import timedelta
+from datetime import timedelta, timezone
 
 import requests
 
@@ -119,15 +119,48 @@ class Asaas:
         return Asaas._request("POST", f"/payments/{payment_id}/refund", json=body or None)
 
     @staticmethod
-    def update_subscription_credit_card(subscription_id, credit_card, credit_card_holder):
-        return Asaas._request("PUT", f"/subscriptions/{subscription_id}", json={
+    def get_pix_qr_code(payment_id):
+        return Asaas._request("GET", f"/payments/{payment_id}/pixQrCode")
+
+    @staticmethod
+    def tokenize_credit_card(customer_id, credit_card, credit_card_holder, remote_ip=None):
+        payload = {
+            "customer": customer_id,
             "creditCard": credit_card,
             "creditCardHolderInfo": credit_card_holder,
-        })
+        }
+        if remote_ip:
+            payload["remoteIp"] = remote_ip
+        return Asaas._request("POST", "/creditCard/tokenizeCreditCard", json=payload)
+
+    @staticmethod
+    def update_subscription_credit_card(
+        subscription_id,
+        credit_card=None,
+        credit_card_holder=None,
+        remote_ip=None,
+        credit_card_token=None,
+    ):
+        payload = {}
+        if credit_card_holder:
+            payload["creditCardHolderInfo"] = credit_card_holder
+        if credit_card_token:
+            payload["creditCardToken"] = credit_card_token
+        elif credit_card:
+            payload["creditCard"] = credit_card
+        if remote_ip:
+            payload["remoteIp"] = remote_ip
+        return Asaas._request("PUT", f"/subscriptions/{subscription_id}", json=payload)
+
+    @staticmethod
+    def due_date_today():
+        sao_paulo = timezone(timedelta(hours=-3))
+        return utcnow().astimezone(sao_paulo).strftime("%Y-%m-%d")
 
     @staticmethod
     def default_next_due_date(trial_days=0):
         days = max(int(trial_days or 0), 0)
         if days == 0:
             days = 1
-        return (utcnow() + timedelta(days=days)).strftime("%Y-%m-%d")
+        sao_paulo = timezone(timedelta(hours=-3))
+        return (utcnow().astimezone(sao_paulo) + timedelta(days=days)).strftime("%Y-%m-%d")

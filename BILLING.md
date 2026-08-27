@@ -1,35 +1,40 @@
-# Billing: Asaas + Google Play
+# Billing: Asaas
 
 This document describes the monetization architecture of MemoBelc.
 
 ## Decisions
 
-- **Asaas is the primary provider** for the web app: subscriptions, **one-time book purchases (invoice includes title, author, language, level, genre and chapters)**, bundle purchases, PIX/boleto/card, coupons and refunds. After `PAYMENT_CONFIRMED` or a client sync, the book is granted to the buyer's library.
-- **Google Play Billing is required on Android** for digital goods sold inside the store listing. The app never offers Asaas checkout on Android for plans/books that have a Play SKU.
+- **Asaas is the only payment provider** for new purchases on web, Android and iOS: subscriptions, one-time book purchases, bundle purchases, course checkouts, PIX, credit card, coupons and refunds.
+- Checkout: **PIX is native in the app** (QR + copy-paste). **Credit card opens the Asaas hosted invoice** (`invoiceUrl` / `checkout_url`). Card data is never collected in the app on new purchases.
+- **Google Play Billing is legacy.** Existing Play subscriptions keep working (`/billing/google/verify` and RTDN). New checkouts never return a Play SKU.
 - **Stripe is disabled.** `STRIPE_*` variables are optional. `/payment/payment_intent` returns `410`.
-- **iOS StoreKit is not implemented in this release.** The Android/iOS app should send users to the website to subscribe until Apple IAP is added. Offering Asaas inside an iOS binary can violate App Store rules for digital goods.
+- Book invoices include title, author, language, level, genre and chapters. After `PAYMENT_CONFIRMED` or a client sync, the book is granted to the buyer's library.
+- External checkout is tied to a **classroom**. An admin must set `checkout_allowed` on the classroom. Then the teacher (owner) can set `checkout_enabled` + `price` and copy `{FRONT_BASE_URL}/checkout/{classroomId}`. Sales pages on Memobelc Page should point to that URL.
+- `POST /billing/public/checkout` with `product_type: "classroom"` is always a guest checkout (session is ignored). New buyers are created with password = CPF/CNPJ digits and `must_change_password`. Existing buyers are matched by email with no password. After payment, the buyer is enrolled in the classroom, the email is confirmed, and a receipt is sent. The JWT in the response is only for PIX polling, not app login.
 
 ## How access works
 
 Entitlements are the single source of truth. A user can access a service or book if **any** of these is valid:
 
-1. An active/trialing subscription (Asaas or Google Play), including a 48h grace window after `next_due_date` when status is pending/overdue.
+1. An active/trialing subscription (Asaas, or a leftover Google Play subscription), including a 48h grace window after `next_due_date` when status is pending/overdue.
 2. A confirmed one-time purchase.
 3. A manual grant from an admin.
 4. An external sale recorded by an admin.
 
-There is **at most one paid active subscription per user**. Upgrade/downgrade stays on the same provider. Switching Asaas ↔ Play requires cancelling the current subscription first.
+There is **at most one paid active subscription per user**. Upgrade/downgrade stays on Asaas. A leftover Play subscription must be cancelled in the Play Store before starting an Asaas plan.
 
-## Asaas vs Google Play
+## Native checkout
 
-| Topic | Asaas (web) | Google Play (Android) |
-|-------|-------------|------------------------|
-| Catalog | Plans and prices in MongoDB | SKUs created in Play Console (`google_play_product_id`) |
-| Checkout | Invoice / PIX / card URL from Asaas | `react-native-iap` BillingClient |
-| Coupons | Platform coupons applied as Asaas `discount` | Play promo codes only (do not mix) |
-| Cancel | API + user area | Play Store subscription management |
-| Webhooks | `POST /billing/asaas/webhook` | `POST /billing/google/rtdn` (Pub/Sub) |
-| Fees | Asaas processing fees | Google Play commission |
+`POST /billing/checkout` requires `billing_type`: `PIX` or `CREDIT_CARD`, plus `cpf_cnpj`.
+
+| Method | Flow |
+|--------|------|
+| PIX | Asaas charge with due date today. Response includes `pix.encoded_image`, `pix.payload` and `payment._id`. The app shows the QR, copies the code and polls `POST /billing/payments/{id}/sync`. `GET /billing/payments/{id}/pix` refreshes an expired QR. |
+| CREDIT_CARD | Creates a pending Asaas charge and returns `checkout_url` (`invoiceUrl`). The app opens the Asaas hosted checkout. Access is granted after `PAYMENT_CONFIRMED` or a client sync. |
+
+The first Asaas invoice of a plan is stored as a `PaymentModel` so PIX polling uses the same sync endpoint.
+
+`POST /billing/update-payment` with `credit_card` updates the card on an Asaas subscription. Leftover Play subscribers still receive `manage_url`.
 
 ## Environment variables
 
@@ -50,22 +55,29 @@ PRICE_ID=
 
 Production Asaas URL: `https://api.asaas.com/v3`.
 
+Play variables are optional and only needed to keep existing Play subscriptions in sync.
+
 ## External setup
 
 1. Create an Asaas account (sandbox then production).
 2. Register a webhook pointing to `{API_URL}/billing/asaas/webhook` with header token `ASAAS_WEBHOOK_TOKEN`. Subscribe to payment and subscription events.
-3. In Google Play Console, create subscription/in-app products whose IDs match `google_play_product_id` on plans/books/bundles.
-4. Create a service account with Android Publisher access and store the JSON in `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` or a file path.
-5. Configure Real-time Developer Notifications (Pub/Sub push) to `{API_URL}/billing/google/rtdn?token={GOOGLE_PLAY_RTDN_TOKEN}`.
-6. Android builds must be EAS development/production builds; Expo Go cannot run Play Billing.
+3. Google Play RTDN remains optional for leftover Play subscriptions: `{API_URL}/billing/google/rtdn?token={GOOGLE_PLAY_RTDN_TOKEN}`.
 
 ## Main API routes
 
 - `GET /plans/public` — catalog
-- `POST /billing/checkout` — `{ product_type, product_id, platform, coupon_code, billing_type }`
+- `GET /classroom/public/{id}` — public classroom offer (only if admin allowed and teacher enabled checkout)
+- `POST /billing/checkout` — `{ product_type, product_id, platform, coupon_code, billing_type, cpf_cnpj, credit_card }` (`product_type`: plan, book, bundle, course, classroom)
+- `POST /billing/public/checkout` — guest classroom checkout (never uses a logged-in session): `{ product_type: "classroom", product_id, name, email, billing_type, cpf_cnpj, credit_card }`. New users get password = CPF/CNPJ digits and `must_change_password: true`. Existing users are matched by email with no password check. Returned JWT is only for PIX polling, not app login.
+- `PUT /auth/change_password` — `{ current_password, new_password }` (Bearer). Required on first login after a checkout-created account. New password cannot be the CPF.
+- `GET /billing/payments/{id}/pix` — refresh PIX QR
+- `POST /billing/payments/{id}/sync` — poll payment (books, bundles and first plan invoice)
 - `GET /billing/me` and `GET /entitlements/me`
-- `POST /billing/cancel`, `POST /billing/change-plan`
-- `POST /billing/google/verify` — `{ sku, purchase_token, product_type }`
+- `POST /billing/cancel`, `POST /billing/change-plan`, `POST /billing/update-payment`
+- `POST /billing/google/verify` — leftover Play purchases only
 - Admin: `/plans/admin`, `/coupons/admin`, `/bundles/admin`, `/admin/billing/*`
+- `GET /admin/billing/classrooms` — list classrooms and checkout flags
+- `PUT /admin/billing/classrooms/{id}` — admin sets `checkout_allowed`
+- `GET /admin/billing/classroom-checkouts` — classroom checkout history and receipts (`receipt_url`)
 
 Default service visibility is **allow for everyone**. Admin can set each service to **allow** (visible to everyone), **disabled** (visible, not clickable), **disabled_upgrade** (paywalled until the user has an active plan), or **hide** (not shown in the menu). `redirect_plans` is treated as `disabled_upgrade`.

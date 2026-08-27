@@ -4,12 +4,15 @@ from datetime import datetime, timezone, timedelta
 
 from flask import current_app
 from flask_mail import Message
+from werkzeug.security import generate_password_hash
 from src.app import mail
 from src.app.config import Config
 from src.app.models.billing_support_model import AuditLogModel, ExternalSaleModel, WebhookEventModel
 from src.app.models.book_bundle_model import BookBundleModel
 from src.app.models.book_model import BookModel
+from src.app.models.classroom_model import ClassroomModel
 from src.app.models.coupon_model import CouponModel
+from src.app.models.course_model import CourseModel
 from src.app.models.entitlement_model import EntitlementModel
 from src.app.models.payment_model import PaymentModel
 from src.app.models.plan_model import PlanModel
@@ -21,8 +24,9 @@ from src.app.services.coupon_service import CouponService
 from src.app.services.entitlement_service import EntitlementService
 from src.app.utils.billing_utils import (
     ACCESS_STATUSES,
+    ASAAS_PAID_STATUSES,
+    NATIVE_BILLING_TYPES,
     asaas_discount_payload,
-    apply_discount,
     compute_grace_until,
     cycle_timedelta,
     invoice_description,
@@ -54,6 +58,70 @@ def _asaas_error_message(exc):
         if isinstance(first, dict) and first.get("description"):
             return first["description"]
     return str(exc)
+
+
+def _normalize_billing_type(value):
+    billing_type = str(value or "").strip().upper().replace("-", "_")
+    if billing_type in ("CREDITCARD", "CARD"):
+        return "CREDIT_CARD"
+    return billing_type
+
+
+def _client_ip_from_data(data):
+    ip = str((data or {}).get("_remote_ip") or (data or {}).get("remote_ip") or "").split(",")[0].strip()
+    return ip or "127.0.0.1"
+
+
+def _asaas_is_paid(status):
+    return str(status or "").upper() in ASAAS_PAID_STATUSES or str(status or "").upper() == "ACTIVE"
+
+
+def _serialize_pix(pix):
+    if not pix:
+        return None
+    encoded = pix.get("encodedImage") or pix.get("encoded_image")
+    payload = pix.get("payload")
+    expiration = pix.get("expirationDate") or pix.get("expiration_date")
+    if not encoded and not payload:
+        return None
+    return {
+        "encoded_image": encoded,
+        "payload": payload,
+        "expiration_date": expiration,
+    }
+
+
+def _extract_credit_card(data):
+    card = data.get("credit_card") if isinstance((data or {}).get("credit_card"), dict) else {}
+    number = _digits_only(card.get("number") or data.get("card_number"))
+    holder = str(card.get("holder_name") or data.get("holder_name") or "").strip()
+    month = _digits_only(card.get("expiry_month") or data.get("expiry_month"))
+    year = _digits_only(card.get("expiry_year") or data.get("expiry_year"))
+    ccv = _digits_only(card.get("ccv") or card.get("cvv") or data.get("ccv") or data.get("cvv"))
+    postal = _digits_only(card.get("postal_code") or data.get("postal_code"))
+    address_number = str(card.get("address_number") or data.get("address_number") or "").strip()
+    phone = _digits_only(card.get("phone") or data.get("phone"))
+    if year and len(year) == 2:
+        year = f"20{year}"
+    if month:
+        month = month.zfill(2)
+    if not all([number, holder, month, year, ccv, postal, address_number, phone]):
+        return None, None, "Informe os dados completos do cartão, CEP, número do endereço e telefone."
+    asaas_card = {
+        "holderName": holder,
+        "number": number,
+        "expiryMonth": month,
+        "expiryYear": year,
+        "ccv": ccv,
+    }
+    holder_info = {
+        "name": holder,
+        "postalCode": postal,
+        "addressNumber": address_number,
+        "phone": phone,
+        "mobilePhone": phone,
+    }
+    return asaas_card, holder_info, None
 
 
 class BillingService:
@@ -98,35 +166,87 @@ class BillingService:
             return BookModel.get_by_id(product_id)
         if product_type == "bundle":
             return BookBundleModel.get_by_id(product_id)
+        if product_type == "course":
+            return CourseModel.get_by_id(product_id)
+        if product_type == "classroom":
+            return ClassroomModel.get_by_id(product_id)
         return None
 
     @staticmethod
-    def _first_invoice_url(asaas_subscription_id):
+    def _first_asaas_payment(asaas_subscription_id):
+        if not asaas_subscription_id:
+            return None
         try:
             payments = Asaas.list_subscription_payments(asaas_subscription_id)
-            data = payments.get("data") or []
-            if data:
-                first = data[0]
-                return first.get("invoiceUrl") or first.get("bankSlipUrl") or first.get("transactionReceiptUrl")
         except AsaasError:
             return None
+        data = payments.get("data") or []
+        return data[0] if data else None
+
+    @staticmethod
+    def _first_invoice_url(asaas_subscription_id):
+        first = BillingService._first_asaas_payment(asaas_subscription_id)
+        if first:
+            return first.get("invoiceUrl") or first.get("bankSlipUrl") or first.get("transactionReceiptUrl")
         return None
+
+    @staticmethod
+    def _pix_for_payment(provider_payment_id):
+        if not provider_payment_id:
+            return None
+        try:
+            return _serialize_pix(Asaas.get_pix_qr_code(provider_payment_id))
+        except AsaasError:
+            return None
+
+    @staticmethod
+    def _attach_card_to_payload(payload, user, customer_id, cpf_cnpj, data):
+        asaas_card, holder_info, error = _extract_credit_card(data)
+        if error:
+            return error
+        holder_info["email"] = user.email
+        holder_info["cpfCnpj"] = cpf_cnpj
+        holder_info["name"] = holder_info.get("name") or user.name or user.email
+        remote_ip = _client_ip_from_data(data)
+        payload["remoteIp"] = remote_ip
+        payload["creditCardHolderInfo"] = holder_info
+        try:
+            tokenized = Asaas.tokenize_credit_card(customer_id, asaas_card, holder_info, remote_ip)
+            token = tokenized.get("creditCardToken")
+            if token:
+                payload["creditCardToken"] = token
+                return None
+        except AsaasError:
+            pass
+        payload["creditCard"] = asaas_card
+        return None
+
+    @staticmethod
+    def _native_checkout_result(billing_type, subscription=None, payment=None, pix=None, granted=False, invoice_url=None):
+        result = {
+            "provider": "asaas",
+            "billing_type": billing_type,
+            "granted": granted,
+        }
+        if subscription is not None:
+            result["subscription"] = subscription
+        if payment is not None:
+            result["payment"] = payment
+        if pix is not None:
+            result["pix"] = pix
+        if invoice_url:
+            result["checkout_url"] = invoice_url
+        return result, 200
 
     @staticmethod
     def checkout(user, data):
         product_type = data.get("product_type") or "plan"
         product_id = data.get("product_id")
-        platform = (data.get("platform") or "web").lower()
-        billing_type = data.get("billing_type") or "UNDEFINED"
+        billing_type = _normalize_billing_type(data.get("billing_type"))
         coupon_code = data.get("coupon_code")
         cpf_cnpj = _normalize_cpf_cnpj(data.get("cpf_cnpj") or getattr(user, "cpf_cnpj", None))
         if not product_id:
             return {"error": "product_id is required"}, 400
-        if platform == "ios":
-            return {
-                "error": "In-app purchases on iOS are not available yet. Please subscribe on the web.",
-                "code": "ios_use_web",
-            }, 400
 
         product = BillingService._product(product_type, product_id)
         if not product:
@@ -140,6 +260,36 @@ class BillingService:
             return {"provider": "free", "granted": True, "product_id": product["_id"]}, 200
         if product_type == "bundle" and not product.get("is_published"):
             return {"error": "Bundle is not available"}, 400
+        if product_type == "course":
+            if not product.get("checkout_enabled"):
+                return {"error": "Course checkout is not available"}, 400
+            classroom_id = product.get("classroom_id")
+            classroom = ClassroomModel.get_by_id(classroom_id) if classroom_id else None
+            if classroom and not classroom.get("checkout_allowed"):
+                return {"error": "Checkout is not allowed for this classroom"}, 400
+            if classroom_id and ClassroomModel.is_student(classroom_id, user._id):
+                return {
+                    "provider": "free",
+                    "granted": True,
+                    "already_enrolled": True,
+                    "product_id": product["_id"],
+                }, 200
+            if float(product.get("price") or 0) <= 0:
+                return {"error": "Course price is not set"}, 400
+        if product_type == "classroom":
+            if not product.get("checkout_allowed"):
+                return {"error": "Checkout is not allowed for this classroom"}, 400
+            if not product.get("checkout_enabled"):
+                return {"error": "Classroom checkout is not available"}, 400
+            if ClassroomModel.is_student(product["_id"], user._id):
+                return {
+                    "provider": "free",
+                    "granted": True,
+                    "already_enrolled": True,
+                    "product_id": product["_id"],
+                }, 200
+            if float(product.get("price") or 0) <= 0:
+                return {"error": "Classroom price is not set"}, 400
 
         amount = float(product.get("price") or 0)
         coupon = None
@@ -150,9 +300,9 @@ class BillingService:
             coupon = quoted["coupon"]
             amount = quoted["final_amount"]
 
-        use_play = platform == "android" and product_type != "book"
-        if use_play:
-            return BillingService._android_checkout(user, product_type, product, coupon)
+        if billing_type not in NATIVE_BILLING_TYPES:
+            return {"error": "Escolha PIX ou cartão de crédito.", "code": "billing_type_required"}, 400
+        # New purchases are always Asaas (PIX / card), including Android and iOS.
         if not cpf_cnpj:
             return {
                 "error": "Informe um CPF ou CNPJ válido para assinar.",
@@ -164,7 +314,7 @@ class BillingService:
             if blocking and blocking.get("status") in ACCESS_STATUSES:
                 if blocking.get("provider") == "google_play":
                     return {
-                        "error": "You already have an active Google Play subscription. Cancel it in the Play Store before subscribing on the web.",
+                        "error": "You already have an active Google Play subscription. Cancel it in the Play Store before subscribing with Asaas.",
                         "code": "duplicate_subscription",
                         "subscription": blocking,
                     }, 409
@@ -174,7 +324,8 @@ class BillingService:
 
         try:
             customer_id = BillingService._ensure_asaas_customer(user, cpf_cnpj)
-            next_due = Asaas.default_next_due_date(product.get("trial_days") if product_type == "plan" else 0)
+            trial_days = int(product.get("trial_days") or 0) if product_type == "plan" else 0
+            next_due = Asaas.default_next_due_date(trial_days) if trial_days > 0 else Asaas.due_date_today()
             discount = asaas_discount_payload(coupon)
             if product_type == "plan":
                 payload = {
@@ -186,13 +337,23 @@ class BillingService:
                     "description": product.get("name"),
                     "externalReference": f"plan:{user._id}:{product['_id']}",
                 }
-                if int(product.get("trial_days") or 0) > 0:
-                    payload["nextDueDate"] = Asaas.default_next_due_date(product.get("trial_days"))
                 if discount:
                     payload["discount"] = discount
                 asaas_sub = Asaas.create_subscription(payload)
-                invoice_url = asaas_sub.get("invoiceUrl") or BillingService._first_invoice_url(asaas_sub.get("id"))
-                status = "trialing" if int(product.get("trial_days") or 0) > 0 else "pending"
+                first_pay = BillingService._first_asaas_payment(asaas_sub.get("id"))
+                invoice_url = (
+                    asaas_sub.get("invoiceUrl")
+                    or (first_pay or {}).get("invoiceUrl")
+                    or BillingService._first_invoice_url(asaas_sub.get("id"))
+                )
+                asaas_pay_status = ((first_pay or {}).get("status") or asaas_sub.get("status") or "").upper()
+                paid = _asaas_is_paid(asaas_pay_status)
+                if paid:
+                    status = "active"
+                elif trial_days > 0:
+                    status = "trialing"
+                else:
+                    status = "pending"
                 subscription = SubscriptionModel.create({
                     "user_id": user._id,
                     "plan_id": product["_id"],
@@ -213,38 +374,63 @@ class BillingService:
                 })
                 if coupon:
                     CouponModel.record_redemption(coupon["_id"], user._id, {"subscription_id": subscription["_id"]})
-                if status == "trialing":
+                payment = None
+                if first_pay and first_pay.get("id"):
+                    payment = PaymentModel.create({
+                        "user_id": user._id,
+                        "type": "subscription",
+                        "provider": "asaas",
+                        "provider_payment_id": first_pay.get("id"),
+                        "status": "confirmed" if paid else "pending",
+                        "amount": amount,
+                        "product_type": "plan",
+                        "product_id": product["_id"],
+                        "subscription_id": subscription["_id"],
+                        "coupon_id": coupon["_id"] if coupon else None,
+                        "invoice_url": invoice_url,
+                        "payment_method": billing_type,
+                        "paid_at": utcnow() if paid else None,
+                    })
+                granted = False
+                if status in ACCESS_STATUSES:
                     EntitlementService.grant_subscription_entitlements(user._id, product, subscription["_id"])
-                return {
-                    "provider": "asaas",
-                    "checkout_url": invoice_url,
-                    "subscription": subscription,
-                }, 200
+                    granted = True
+                pix = BillingService._pix_for_payment((first_pay or {}).get("id")) if billing_type == "PIX" else None
+                return BillingService._native_checkout_result(
+                    billing_type,
+                    subscription=subscription,
+                    payment=payment,
+                    pix=pix,
+                    granted=granted,
+                    invoice_url=invoice_url,
+                )
 
             snapshot = product_snapshot(product_type, product)
             payload = {
                 "customer": customer_id,
                 "billingType": billing_type,
                 "value": amount,
-                "dueDate": Asaas.default_next_due_date(0),
+                "dueDate": Asaas.due_date_today(),
                 "description": invoice_description(product_type, product),
                 "externalReference": f"{product_type}:{user._id}:{product['_id']}",
             }
             if discount:
                 payload["discount"] = discount
             asaas_pay = Asaas.create_payment(payload)
+            paid = _asaas_is_paid(asaas_pay.get("status"))
             payment = PaymentModel.create({
                 "user_id": user._id,
                 "type": product_type,
                 "provider": "asaas",
                 "provider_payment_id": asaas_pay.get("id"),
-                "status": "pending",
+                "status": "confirmed" if paid else "pending",
                 "amount": amount,
                 "product_type": product_type,
                 "product_id": product["_id"],
                 "coupon_id": coupon["_id"] if coupon else None,
                 "invoice_url": asaas_pay.get("invoiceUrl"),
                 "payment_method": billing_type,
+                "paid_at": utcnow() if paid else None,
                 "metadata": {
                     "external_reference": payload["externalReference"],
                     "invoice_description": payload["description"],
@@ -253,36 +439,20 @@ class BillingService:
             })
             if coupon:
                 CouponModel.record_redemption(coupon["_id"], user._id, {"payment_id": payment["_id"]})
-            return {
-                "provider": "asaas",
-                "checkout_url": asaas_pay.get("invoiceUrl"),
-                "payment": payment,
-            }, 200
+            granted = False
+            if paid:
+                BillingService._fulfill_one_time(payment)
+                granted = True
+            pix = BillingService._pix_for_payment(asaas_pay.get("id")) if billing_type == "PIX" else None
+            return BillingService._native_checkout_result(
+                billing_type,
+                payment=payment,
+                pix=pix,
+                granted=granted,
+                invoice_url=asaas_pay.get("invoiceUrl"),
+            )
         except AsaasError as exc:
             return {"error": _asaas_error_message(exc), "code": "asaas_error", "details": exc.payload}, exc.status_code
-
-    @staticmethod
-    def _android_checkout(user, product_type, product, coupon):
-        blocking = BillingService._blocking_subscription(user._id)
-        if product_type == "plan" and blocking and blocking.get("status") in ACCESS_STATUSES:
-            if blocking.get("provider") == "asaas":
-                return {
-                    "error": "You already have an active web subscription. Cancel it before purchasing on Google Play.",
-                    "code": "duplicate_subscription",
-                    "subscription": blocking,
-                }, 409
-            if blocking.get("plan_id") == product.get("_id"):
-                return {"error": "You already have an active subscription", "code": "duplicate_subscription"}, 409
-        sku = product.get("google_play_product_id")
-        if not sku:
-            return {"error": "This product is not available on Google Play", "code": "missing_sku"}, 400
-        return {
-            "provider": "google_play",
-            "sku": sku,
-            "product_type": product_type,
-            "product_id": product["_id"],
-            "coupon_id": coupon["_id"] if coupon else None,
-        }, 200
 
     @staticmethod
     def handle_asaas_webhook(payload, headers):
@@ -437,6 +607,183 @@ class BillingService:
             EntitlementService.grant_book(user_id, product_id, source="purchase", source_id=payment["_id"])
         elif product_type == "bundle":
             EntitlementService.grant_bundle(user_id, product_id, source="purchase", source_id=payment["_id"])
+        elif product_type == "course":
+            EntitlementService.grant_course(user_id, product_id, source="purchase", source_id=payment["_id"])
+            BillingService._enroll_course_buyer(user_id, product_id)
+            BillingService._confirm_buyer_email(user_id)
+            BillingService._send_purchase_receipt(payment)
+        elif product_type == "classroom":
+            EntitlementService.grant_classroom(user_id, product_id, source="purchase", source_id=payment["_id"])
+            BillingService._enroll_classroom_buyer(user_id, product_id)
+            BillingService._confirm_buyer_email(user_id)
+            BillingService._send_purchase_receipt(payment)
+
+    @staticmethod
+    def _enroll_course_buyer(user_id, course_id):
+        course = CourseModel.get_by_id(course_id)
+        if not course:
+            return
+        classroom_id = course.get("classroom_id")
+        if not classroom_id:
+            return
+        if ClassroomModel.is_student(classroom_id, user_id):
+            user = UserModel.find_by_id(user_id)
+            if user and user.email:
+                ClassroomModel.remove_user_guest(classroom_id, user.email)
+            return
+        classroom = ClassroomModel.get_by_id(classroom_id)
+        if not classroom:
+            return
+        ClassroomModel.add_students(classroom_id, user_id)
+        user = UserModel.find_by_id(user_id)
+        if user and user.email:
+            ClassroomModel.remove_user_guest(classroom_id, user.email)
+
+    @staticmethod
+    def _enroll_classroom_buyer(user_id, classroom_id):
+        if not classroom_id:
+            return
+        if ClassroomModel.is_student(classroom_id, user_id):
+            user = UserModel.find_by_id(user_id)
+            if user and user.email:
+                ClassroomModel.remove_user_guest(classroom_id, user.email)
+            return
+        classroom = ClassroomModel.get_by_id(classroom_id)
+        if not classroom:
+            return
+        ClassroomModel.add_students(classroom_id, user_id)
+        user = UserModel.find_by_id(user_id)
+        if user and user.email:
+            ClassroomModel.remove_user_guest(classroom_id, user.email)
+
+    @staticmethod
+    def _confirm_buyer_email(user_id):
+        user = UserModel.find_by_id(user_id)
+        if user and user.email and not UserModel.verify_is_confirmed(user.email):
+            UserModel.turn_confirmed(user.email)
+
+    @staticmethod
+    def _send_purchase_receipt(payment):
+        metadata = dict(payment.get("metadata") or {})
+        if metadata.get("receipt_sent"):
+            return
+        user = UserModel.find_by_id(payment.get("user_id"))
+        if not user or not user.email:
+            return
+        product = metadata.get("product") or {}
+        product_name = product.get("name") or product.get("titulo") or (
+            "Turma" if payment.get("product_type") == "classroom" else "Curso"
+        )
+        amount = payment.get("amount") or 0
+        transaction_id = payment.get("_id")
+        provider_id = payment.get("provider_payment_id") or ""
+        paid_at = payment.get("paid_at") or utcnow()
+        paid_label = paid_at.strftime("%d/%m/%Y %H:%M") if hasattr(paid_at, "strftime") else str(paid_at)
+        try:
+            msg = Message(
+                subject="Compra confirmada - Memobelc",
+                recipients=[user.email],
+                sender=Config.MAIL_DEFAULT_SENDER or Config.MAIL_USERNAME,
+            )
+            msg.body = f"""
+Olá {user.name or ''}!
+
+Sua compra foi confirmada.
+
+Produto: {product_name}
+Valor: R$ {float(amount):.2f}
+Número da transação: {transaction_id}
+ID do pagamento: {provider_id}
+Data: {paid_label}
+
+Acesse a plataforma com este e-mail:
+{Config.FRONT_BASE_URL}/login
+
+Se esta foi sua primeira compra, a senha inicial é o seu CPF (somente números).
+No primeiro acesso você deverá criar uma nova senha.
+
+O acesso à turma já está liberado na sua conta.
+
+Equipe Memobelc
+""".strip()
+            mail.send(msg)
+            metadata["receipt_sent"] = True
+            PaymentModel.update(payment["_id"], {"metadata": metadata})
+        except Exception as exc:
+            current_app.logger.error(f"Failed to send purchase receipt: {exc}")
+
+    @staticmethod
+    def public_checkout(data):
+        product_type = data.get("product_type") or "classroom"
+        if product_type == "course":
+            course = CourseModel.get_by_id(data.get("product_id"))
+            classroom_id = (course or {}).get("classroom_id")
+            if not classroom_id:
+                return {"error": "Only classroom public checkout is supported"}, 400
+            data = dict(data)
+            data["product_type"] = "classroom"
+            data["product_id"] = classroom_id
+            product_type = "classroom"
+        if product_type != "classroom":
+            return {"error": "Only classroom public checkout is supported"}, 400
+        product_id = data.get("product_id")
+        if not product_id:
+            return {"error": "product_id is required"}, 400
+        email = (data.get("email") or "").strip().lower()
+        name = (data.get("name") or "").strip()
+        cpf_cnpj = _normalize_cpf_cnpj(data.get("cpf_cnpj"))
+        if not email:
+            return {"error": "email is required"}, 400
+        if not cpf_cnpj:
+            return {"error": "Informe um CPF ou CNPJ válido.", "code": "cpf_required"}, 400
+
+        product = BillingService._product("classroom", product_id)
+        if not product or not product.get("checkout_allowed") or not product.get("checkout_enabled"):
+            return {"error": "Product not found"}, 404
+        if float(product.get("price") or 0) <= 0:
+            return {"error": "Classroom price is not set"}, 400
+
+        from src.app.services.auth_service import AuthService
+
+        created = False
+        user = UserModel.find_by_email(email)
+        if user:
+            classroom_id = product.get("_id")
+            if classroom_id and ClassroomModel.is_student(classroom_id, user._id):
+                auth = AuthService.issue_auth_token(user)
+                return {
+                    **auth,
+                    "granted": True,
+                    "already_enrolled": True,
+                    "provider": "free",
+                    "product_id": product["_id"],
+                }, 200
+            if not getattr(user, "cpf_cnpj", None):
+                UserModel.set_cpf_cnpj(user._id, cpf_cnpj)
+        else:
+            if not name:
+                return {"error": "name is required"}, 400
+            new_user = UserModel(
+                name=name,
+                email=email,
+                password=generate_password_hash(cpf_cnpj),
+                cpf_cnpj=cpf_cnpj,
+                must_change_password=True,
+            )
+            new_user.save_to_db()
+            user = UserModel.find_by_email(email)
+            created = True
+            if not user:
+                return {"error": "Could not create user"}, 500
+
+        result, status = BillingService.checkout(user, data)
+        if status >= 400:
+            return result, status
+        auth = AuthService.issue_auth_token(user)
+        result.update(auth)
+        result["user_created"] = created
+        result["must_change_password"] = bool(getattr(user, "must_change_password", False))
+        return result, status
 
     @staticmethod
     def _revoke_one_time(payment):
@@ -459,6 +806,8 @@ class BillingService:
         if not payment or str(payment.get("user_id")) != str(user._id):
             return {"error": "Payment not found"}, 404
         if payment.get("status") == "confirmed":
+            if payment.get("subscription_id"):
+                return {"payment": payment, "granted": True}, 200
             BillingService._fulfill_one_time(payment)
             return {"payment": payment, "granted": True}, 200
         if payment.get("provider") != "asaas" or not payment.get("provider_payment_id"):
@@ -468,14 +817,19 @@ class BillingService:
         except AsaasError as exc:
             return {"error": _asaas_error_message(exc), "code": "asaas_error", "details": exc.payload}, exc.status_code
         status = (asaas_pay.get("status") or "").upper()
-        if status in ("CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"):
+        if status in ASAAS_PAID_STATUSES:
             payment = PaymentModel.update(payment["_id"], {
                 "status": "confirmed",
                 "paid_at": utcnow(),
                 "invoice_url": asaas_pay.get("invoiceUrl") or payment.get("invoice_url"),
                 "payment_method": asaas_pay.get("billingType") or payment.get("payment_method"),
             })
-            BillingService._fulfill_one_time(payment)
+            if payment.get("subscription_id"):
+                subscription = SubscriptionModel.get_by_id(payment["subscription_id"])
+                if subscription:
+                    BillingService._apply_subscription_payment(subscription, "confirmed", asaas_pay)
+            else:
+                BillingService._fulfill_one_time(payment)
             return {"payment": payment, "granted": True, "asaas_status": status}, 200
         return {"payment": payment, "granted": False, "asaas_status": status}, 200
 
@@ -531,13 +885,62 @@ class BillingService:
         return {"subscription": updated, "plan": plan}, 200
 
     @staticmethod
-    def update_payment_method(user):
+    def get_pix_qr(user, payment_id):
+        payment = PaymentModel.get_by_id(payment_id)
+        if not payment or str(payment.get("user_id")) != str(user._id):
+            return {"error": "Payment not found"}, 404
+        if payment.get("provider") != "asaas" or not payment.get("provider_payment_id"):
+            return {"error": "PIX is not available for this payment", "code": "pix_unavailable"}, 400
+        try:
+            pix = _serialize_pix(Asaas.get_pix_qr_code(payment["provider_payment_id"]))
+        except AsaasError as exc:
+            return {"error": _asaas_error_message(exc), "code": "asaas_error", "details": exc.payload}, exc.status_code
+        if not pix:
+            return {"error": "PIX QR code is not available yet", "code": "pix_unavailable"}, 400
+        return {"payment": payment, "pix": pix}, 200
+
+    @staticmethod
+    def update_payment_method(user, data=None):
+        data = data or {}
         subscription = BillingService._blocking_subscription(user._id)
         if not subscription:
             return {"error": "No active subscription"}, 404
         if subscription.get("provider") == "google_play":
-            return {"manage_url": "https://play.google.com/store/account/subscriptions"}, 200
-        return {"checkout_url": subscription.get("invoice_url")}, 200
+            return {
+                "provider": "google_play",
+                "manage_url": "https://play.google.com/store/account/subscriptions",
+            }, 200
+        if subscription.get("provider") != "asaas" or not subscription.get("provider_subscription_id"):
+            return {"error": "No Asaas subscription"}, 400
+        asaas_card, holder_info, error = _extract_credit_card(data)
+        if error:
+            return {"error": error, "code": "credit_card_required"}, 400
+        cpf_cnpj = _normalize_cpf_cnpj(data.get("cpf_cnpj") or getattr(user, "cpf_cnpj", None))
+        if not cpf_cnpj:
+            return {"error": "Informe um CPF ou CNPJ válido.", "code": "cpf_required"}, 400
+        holder_info["email"] = user.email
+        holder_info["cpfCnpj"] = cpf_cnpj
+        remote_ip = _client_ip_from_data(data)
+        token = None
+        customer_id = subscription.get("asaas_customer_id") or getattr(user, "asaas_customer_id", None)
+        if customer_id:
+            try:
+                tokenized = Asaas.tokenize_credit_card(customer_id, asaas_card, holder_info, remote_ip)
+                token = tokenized.get("creditCardToken")
+            except AsaasError:
+                token = None
+        try:
+            Asaas.update_subscription_credit_card(
+                subscription["provider_subscription_id"],
+                credit_card=asaas_card,
+                credit_card_holder=holder_info,
+                remote_ip=remote_ip,
+                credit_card_token=token,
+            )
+        except AsaasError as exc:
+            return {"error": _asaas_error_message(exc), "code": "asaas_error", "details": exc.payload}, exc.status_code
+        updated = SubscriptionModel.update(subscription["_id"], {"payment_method": "CREDIT_CARD"})
+        return {"updated": True, "provider": "asaas", "subscription": updated}, 200
 
     @staticmethod
     def admin_set_status(admin, subscription_id, status, action=None):
@@ -583,6 +986,12 @@ class BillingService:
             result = EntitlementService.grant_book(user_id, resource_id, source="manual", granted_by=admin._id, notes=notes)
         elif grant_type == "bundle":
             result = EntitlementService.grant_bundle(user_id, resource_id, source="manual", granted_by=admin._id, notes=notes)
+        elif grant_type == "course":
+            result =             EntitlementService.grant_course(user_id, resource_id, source="manual", granted_by=admin._id, notes=notes)
+            BillingService._enroll_course_buyer(user_id, resource_id)
+        elif grant_type == "classroom":
+            result = EntitlementService.grant_classroom(user_id, resource_id, source="manual", granted_by=admin._id, notes=notes)
+            BillingService._enroll_classroom_buyer(user_id, resource_id)
         elif grant_type == "service":
             result = EntitlementModel.grant({
                 "user_id": user_id,
@@ -631,6 +1040,12 @@ class BillingService:
                 grants.append(EntitlementService.grant_book(user._id, product_id, source="external", granted_by=admin._id, notes="external sale"))
             elif product_type == "bundle":
                 grants.append(EntitlementService.grant_bundle(user._id, product_id, source="external", granted_by=admin._id, notes="external sale"))
+            elif product_type == "course":
+                grants.append(EntitlementService.grant_course(user._id, product_id, source="external", granted_by=admin._id, notes="external sale"))
+                BillingService._enroll_course_buyer(user._id, product_id)
+            elif product_type == "classroom":
+                grants.append(EntitlementService.grant_classroom(user._id, product_id, source="external", granted_by=admin._id, notes="external sale"))
+                BillingService._enroll_classroom_buyer(user._id, product_id)
             elif product_type == "service":
                 grants.append(EntitlementModel.grant({
                     "user_id": user._id,
@@ -666,6 +1081,39 @@ class BillingService:
         })
         AuditLogModel.record(admin._id, "external_sale", product_type, sale["_id"], None, sale)
         return {"sale": sale, "user_created": created, "grants": grants}, 201
+
+    @staticmethod
+    def admin_classroom_checkouts(filters=None, skip=0, limit=50):
+        filters = dict(filters or {})
+        product_type = filters.get("product_type") or "classroom"
+        if product_type not in ("classroom", "course"):
+            product_type = "classroom"
+        query_filters = {"product_type": product_type}
+        if filters.get("status"):
+            query_filters["status"] = filters.get("status")
+        if filters.get("product_id"):
+            query_filters["product_id"] = filters.get("product_id")
+        items, total = PaymentModel.query(query_filters, skip=skip, limit=limit)
+        enriched = []
+        for item in items:
+            user = UserModel.find_by_id(item.get("user_id"))
+            classroom = None
+            if item.get("product_type") == "classroom":
+                classroom = ClassroomModel.get_by_id(item.get("product_id"))
+            elif item.get("product_type") == "course":
+                course = CourseModel.get_by_id(item.get("product_id"))
+                if course:
+                    classroom = ClassroomModel.get_by_id(course.get("classroom_id"))
+            snapshot = (item.get("metadata") or {}).get("product") or {}
+            enriched.append({
+                **item,
+                "buyer_name": user.name if user else None,
+                "buyer_email": user.email if user else None,
+                "classroom_name": (classroom or {}).get("name") or snapshot.get("name"),
+                "receipt_url": item.get("invoice_url"),
+                "transaction_id": item.get("_id"),
+            })
+        return {"payments": enriched, "total": total}
 
     @staticmethod
     def _send_access_invite(email, name):
